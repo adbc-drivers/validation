@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Tests that involve running queries.
+
+To use: import TestQuery and generate_tests, and from your own
+pytest_generate_tests hook, call generate_tests.
+"""
+
 import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
@@ -20,9 +27,8 @@ from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
 
 
-def generate_tests(quirks, metafunc) -> None:
-    # Given the drivers to test, load all the queries, then parametrize the
-    # tests in this module with the driver and query.
+def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
+    """Parameterize the tests in this module for the given driver."""
     combinations = []
 
     queries = model.query_set(quirks.queries_path)
@@ -55,6 +61,8 @@ def generate_tests(quirks, metafunc) -> None:
 
 
 class TestQuery:
+    """Tests that involve running queries."""
+
     def test_query(
         self,
         driver: model.DriverQuirks,
