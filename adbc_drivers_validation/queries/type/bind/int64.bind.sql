@@ -1,0 +1,1 @@
+INSERT INTO test_int64 VALUES ($1)

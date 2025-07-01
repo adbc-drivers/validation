@@ -1,0 +1,1 @@
+INSERT INTO test_int32 VALUES ($1)

@@ -1,0 +1,1 @@
+INSERT INTO test_float32 VALUES ($1)

@@ -1,0 +1,1 @@
+INSERT INTO test_int16 VALUES ($1)
