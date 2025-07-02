@@ -61,12 +61,6 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     )
 
 
-@pytest.fixture
-def requires_transactions(driver: model.DriverQuirks) -> None:
-    if not driver.features.connection_transactions:
-        pytest.skip("Driver does not support transactions")
-
-
 class TestStatement:
     def test_parameter_schema(
         self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
@@ -100,8 +94,10 @@ class TestStatement:
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
-        requires_transactions: None,
     ) -> None:
+        if not driver.features.connection_transactions:
+            pytest.skip("Driver does not support transactions")
+
         assert conn.adbc_connection.get_option("adbc.connection.autocommit") == "true"
 
         with pytest.raises(conn.ProgrammingError):
