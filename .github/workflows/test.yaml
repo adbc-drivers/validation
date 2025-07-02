@@ -12,29 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[project]
-name = "adbc-drivers-validation"
-version = "0.1"
-requires-python = ">=3.13"
+name: Test
 
-dependencies = [
-  "adbc-driver-manager>=1.6.0,<2",
-  "duckdb>=1.3.1,<2",
-  "jinja2>=3.1.6,<4",
-  "pyarrow>=20.0.0,<21",
-  "pytest>=8.4.1,<9",
-]
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
 
-[build-system]
-requires = ["setuptools >= 77.0.3"]
-build-backend = "setuptools.build_meta"
+defaults:
+  run:
+    shell: bash
 
-[tool.pixi.pypi-dependencies]
-adbc-drivers-validation = { path = ".", editable = true }
+permissions:
+  contents: read
 
-[tool.pixi.tasks]
-test = "pytest -vvs tests/"
+jobs:
+  test:
+    name: "Test"
+    runs-on: ubuntu-latest
 
-[tool.pixi.workspace]
-channels = ["conda-forge"]
-platforms = ["linux-64", "osx-arm64"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: prefix-dev/setup-pixi@14c8aabd75893f83f4ab30c03e7cf853c8208961  # v0.8.10
+        with:
+          pixi-version: v0.44.0
+          run-install: false
+
+      - name: Test
+        run: pixi run --locked test
