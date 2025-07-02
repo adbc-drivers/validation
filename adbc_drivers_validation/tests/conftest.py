@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Common pytest hooks, fixtures, and configuration."""
+
 import os
 
-import adbc_driver_manager.dbapi
 import pytest
-import validation.model
 
-pytest.register_assert_rewrite("validation.compare")
+# Rewrite assertions in this module to have the friendly display
+pytest.register_assert_rewrite("adbc_drivers_validation.compare")
 
 
 def pytest_collection_modifyitems(
     session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    # Based on marks, add JUnit XML properties
+    """Add JUnit XML metadata based on test markers and docstrings."""
     for item in items:
         if not hasattr(item, "callspec"):
             continue
@@ -53,43 +54,6 @@ def pytest_collection_modifyitems(
                             item.user_properties.append((f"tag:{tag_name}", value))
                     else:
                         item.user_properties.append((f"tag:{tag_name}", tag_value))
-
-
-@pytest.fixture(scope="module")
-def conn(
-    request, driver: validation.model.DriverQuirks
-) -> adbc_driver_manager.dbapi.Connection:
-    path = validation.model.driver_path(driver.driver)
-
-    db_kwargs = {}
-    conn_kwargs = {}
-
-    for k, v in driver.setup.database.items():
-        if isinstance(v, str):
-            db_kwargs[k] = v
-        else:
-            db_kwargs[k] = os.environ[v.env]
-
-    autocommit = True
-    with adbc_driver_manager.dbapi.connect(
-        driver=str(path),
-        db_kwargs=db_kwargs,
-        conn_kwargs=conn_kwargs,
-        autocommit=autocommit,
-    ) as conn:
-        make_cursor = conn.cursor
-
-        def _cursor(*args, **kwargs) -> adbc_driver_manager.dbapi.Cursor:
-            return make_cursor(adbc_stmt_kwargs=driver.setup.statement)
-
-        conn.cursor = _cursor
-        yield conn
-
-
-@pytest.fixture(scope="module")
-def driver(request) -> validation.model.DriverQuirks:
-    driver = request.param
-    return validation.model.driver_manifest(driver)
 
 
 @pytest.fixture(scope="session")

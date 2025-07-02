@@ -33,23 +33,6 @@ DRIVER_EXTENSION = {"Windows": "dll", "Darwin": "dylib"}.get(platform.system(), 
 
 
 @functools.cache
-def driver_path(name: str) -> Path:
-    filename = f"lib{name}.{DRIVER_EXTENSION}"
-    candidates = []
-    if "DRIVER_PATH" in os.environ:
-        candidates.append(Path(os.environ["DRIVER_PATH"]) / filename)
-    candidates.append(Path(__file__).parent.parent.parent / "packaging" / filename)
-
-    for path in candidates:
-        if path.is_file():
-            return path
-
-    raise FileNotFoundError(
-        f"{filename} not found. Set DRIVER_PATH. Searched: {candidates}"
-    )
-
-
-@functools.cache
 def query(path: Path) -> str:
     with path.open() as f:
         return f.read().strip()
