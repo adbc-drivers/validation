@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pathlib import Path
+import io
 
 import pyarrow
 import pytest
@@ -21,11 +21,19 @@ from adbc_drivers_validation import arrowjson
 
 
 def test_parse_int32_schema():
-    schema_path = (
-        Path(__file__).parent.parent / "queries/base/type/literal/int32.schema.json"
-    )
-    with schema_path.open("r") as f:
-        parsed_schema = arrowjson.load_schema(f)
+    f = io.StringIO("""
+{
+    "format": "+s",
+    "children": [
+        {
+            "name": "res",
+            "format": "i",
+            "flags": ["nullable"]
+        }
+    ]
+}
+    """)
+    parsed_schema = arrowjson.load_schema(f)
 
     # Should be a schema with a single int32 field named 'res'
     assert len(parsed_schema) == 1
