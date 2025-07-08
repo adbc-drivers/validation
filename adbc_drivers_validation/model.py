@@ -23,6 +23,7 @@ import tomllib
 import typing
 from pathlib import Path
 
+import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
@@ -79,6 +80,9 @@ class DriverFeatures:
     connection_get_table_schema: bool = False
     connection_transactions: bool = False
     statement_bulk_ingest: bool = False
+    statement_bulk_ingest_catalog: bool = False
+    statement_bulk_ingest_schema: bool = False
+    statement_bulk_ingest_temporary: bool = False
     statement_execute_schema: bool = False
     statement_get_parameter_schema: bool = False
     statement_prepare: bool = True
@@ -92,6 +96,9 @@ class DriverFeatures:
         connection_get_table_schema=False,
         connection_transactions=False,
         statement_bulk_ingest=False,
+        statement_bulk_ingest_catalog=False,
+        statement_bulk_ingest_schema=False,
+        statement_bulk_ingest_temporary=False,
         statement_execute_schema=False,
         statement_get_parameter_schema=False,
         statement_prepare=True,
@@ -102,6 +109,9 @@ class DriverFeatures:
         self.connection_get_table_schema = connection_get_table_schema
         self.connection_transactions = connection_transactions
         self.statement_bulk_ingest = statement_bulk_ingest
+        self.statement_bulk_ingest_catalog = statement_bulk_ingest_catalog
+        self.statement_bulk_ingest_schema = statement_bulk_ingest_schema
+        self.statement_bulk_ingest_temporary = statement_bulk_ingest_temporary
         self.statement_execute_schema = statement_execute_schema
         self.statement_get_parameter_schema = statement_get_parameter_schema
         self.statement_prepare = statement_prepare
@@ -138,9 +148,42 @@ class DriverQuirks(abc.ABC):
         """
         return "?"
 
+    def drop_table(
+        self, *, table_name: str, if_exists: bool = True, temporary: bool = False
+    ) -> str:
+        """
+        Drop a table.
+
+        Parameters
+        ----------
+        cursor : adbc_driver_manager.dbapi.Cursor
+            The cursor to execute the query.
+        table_name : str
+            The name of the table to drop.
+        if_exists : bool
+            If True, do not raise an error if the table does not exist.
+        temporary : bool
+            If True, the table is a temporary table.
+        """
+        if temporary:
+            raise NotImplementedError
+        if if_exists:
+            return f"DROP TABLE IF EXISTS {table_name}"
+        else:
+            return f"DROP TABLE {table_name}"
+
+    @abc.abstractmethod
     def is_table_not_found(self, table_name: str, error: Exception) -> bool:
         """Check if the error indicates a table not found."""
         ...
+
+    def qualify_temp_table(
+        self, cursor: adbc_driver_manager.dbapi.Cursor, name: str
+    ) -> str:
+        """
+        Return the fully escaped name of a temporary table.
+        """
+        raise NotImplementedError
 
     def split_statement(self, statement: str) -> list[str]:
         """
