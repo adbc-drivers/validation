@@ -15,8 +15,12 @@
 """Common pytest hooks, fixtures, and configuration."""
 
 import os
+import typing
 
+import adbc_driver_manager.dbapi
 import pytest
+
+from adbc_drivers_validation import model
 
 # Rewrite assertions in this module to have the friendly display
 pytest.register_assert_rewrite("adbc_drivers_validation.compare")
@@ -61,3 +65,48 @@ def manual_test() -> None:
     """Tests that require user input."""
     if os.environ.get("RUN_MANUAL_TESTS") not in {"1", "true", "yes"}:
         pytest.skip("Skipping manual test, set RUN_MANUAL_TESTS=1")
+
+
+@pytest.fixture(scope="module")
+def conn_factory(
+    request,
+    driver: model.DriverQuirks,
+    driver_path: str,
+) -> typing.Callable[[], adbc_driver_manager.dbapi.Connection]:
+    db_kwargs = {}
+    conn_kwargs = {}
+
+    for k, v in driver.setup.database.items():
+        if isinstance(v, model.FromEnv):
+            if v.env not in os.environ:
+                pytest.skip(f"Must set {v.env}")
+            db_kwargs[k] = os.environ[v.env]
+        else:
+            db_kwargs[k] = v
+
+    def _factory():
+        autocommit = True
+        conn = adbc_driver_manager.dbapi.connect(
+            driver=driver_path,
+            db_kwargs=db_kwargs,
+            conn_kwargs=conn_kwargs,
+            autocommit=autocommit,
+        )
+        make_cursor = conn.cursor
+
+        # Inject the default args here
+        def _cursor(*args, **kwargs) -> adbc_driver_manager.dbapi.Cursor:
+            return make_cursor(adbc_stmt_kwargs=driver.setup.statement)
+
+        conn.cursor = _cursor
+        return conn
+
+    return _factory
+
+
+@pytest.fixture(scope="module")
+def conn(
+    conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+) -> adbc_driver_manager.dbapi.Connection:
+    with conn_factory() as conn:
+        yield conn

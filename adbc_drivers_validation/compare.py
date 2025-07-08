@@ -112,9 +112,12 @@ def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
 
 
 def compare_tables(
-    expected: pyarrow.Table, actual: pyarrow.Table, meta: dict[str, typing.Any]
+    expected: pyarrow.Table,
+    actual: pyarrow.Table,
+    meta: dict[str, typing.Any] | None = None,
 ):
     """Compare two Arrow tables for equality."""
+    meta = meta or {}
     expected = make_nullable(expected)
     actual = make_nullable(actual)
 

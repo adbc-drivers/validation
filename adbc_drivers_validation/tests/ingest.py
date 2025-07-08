@@ -20,6 +20,7 @@ pytest_generate_tests hook, call generate_tests.
 """
 
 import time
+import typing
 
 import adbc_driver_manager.dbapi
 import pyarrow
@@ -37,6 +38,19 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
         metafunc.parametrize(
             "driver",
             [pytest.param(quirks.name, id=quirks.name)],
+            scope="module",
+            indirect=["driver"],
+        )
+        return
+
+    if metafunc.definition.name == "test_temporary":
+        marks = []
+        if not quirks.features.statement_bulk_ingest_temporary:
+            marks.append(pytest.mark.skip(reason="not implemented"))
+
+        metafunc.parametrize(
+            "driver",
+            [pytest.param(quirks.name, id=quirks.name, marks=marks)],
             scope="module",
             indirect=["driver"],
         )
@@ -104,6 +118,7 @@ class TestIngest:
 
     def test_append(
         self,
+        driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: Query,
     ) -> None:
@@ -121,7 +136,7 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             cursor.adbc_ingest(table_name, data, mode="create")
             cursor.adbc_ingest(table_name, data2, mode="append")
 
@@ -334,3 +349,45 @@ class TestIngest:
                 "xdbc_is_nullable": "NO",
             },
         )
+
+    def test_temporary(
+        self,
+        driver: model.DriverQuirks,
+        conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+    ) -> None:
+        data1 = pyarrow.Table.from_pydict(
+            {
+                "idx": [1, 2, 3],
+                "value": ["foo", "bar", "baz"],
+            }
+        )
+        data2 = pyarrow.Table.from_pydict(
+            {
+                "idx": [4, 5, 6],
+                "value": ["qux", "quux", "spam"],
+            }
+        )
+        table_name = "test_ingest_temporary"
+
+        with conn_factory() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(driver.drop_table(table_name=table_name))
+                cursor.adbc_ingest(table_name, data1, temporary=True)
+                cursor.adbc_ingest(table_name, data2, temporary=False)
+
+            with conn.cursor() as cursor:
+                select_normal = f"SELECT idx, value FROM {driver.features.current_schema}.{table_name} ORDER BY idx ASC"
+                select_temporary = f"SELECT idx, value FROM {driver.qualify_temp_table(cursor, table_name)} ORDER BY idx ASC"
+
+                cursor.adbc_statement.set_sql_query(select_normal)
+                handle, _ = cursor.adbc_statement.execute_query()
+                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                    result_normal = reader.read_all()
+
+                cursor.adbc_statement.set_sql_query(select_temporary)
+                handle, _ = cursor.adbc_statement.execute_query()
+                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                    result_temporary = reader.read_all()
+
+        compare.compare_tables(data1, result_temporary)
+        compare.compare_tables(data2, result_normal)
