@@ -88,6 +88,9 @@ class DriverFeatures:
     statement_prepare: bool = True
     _current_catalog: str | FromEnv | None = None
     _current_schema: str | FromEnv | None = None
+    _secondary_schema: str | FromEnv | None = None
+    _secondary_catalog: str | FromEnv | None = None
+    _secondary_catalog_schema: str | FromEnv | None = None
     supported_xdbc_fields: list[str] = dataclasses.field(default_factory=list)
 
     def __init__(
@@ -104,6 +107,9 @@ class DriverFeatures:
         statement_prepare=True,
         current_catalog=None,
         current_schema=None,
+        secondary_schema=None,
+        secondary_catalog=None,
+        secondary_catalog_schema=None,
         supported_xdbc_fields=None,
     ):
         self.connection_get_table_schema = connection_get_table_schema
@@ -117,6 +123,9 @@ class DriverFeatures:
         self.statement_prepare = statement_prepare
         self._current_catalog = current_catalog
         self._current_schema = current_schema
+        self._secondary_schema = secondary_schema
+        self._secondary_catalog = secondary_catalog
+        self._secondary_catalog_schema = secondary_catalog_schema
         self.supported_xdbc_fields = supported_xdbc_fields or []
 
     @property
@@ -130,6 +139,24 @@ class DriverFeatures:
         if isinstance(self._current_schema, FromEnv):
             return self._current_schema.get_or_raise()
         return self._current_schema
+
+    @property
+    def secondary_schema(self) -> str | None:
+        if isinstance(self._secondary_schema, FromEnv):
+            return self._secondary_schema.get_or_raise()
+        return self._secondary_schema
+
+    @property
+    def secondary_catalog(self) -> str | None:
+        if isinstance(self._secondary_catalog, FromEnv):
+            return self._secondary_catalog.get_or_raise()
+        return self._secondary_catalog
+
+    @property
+    def secondary_catalog_schema(self) -> str | None:
+        if isinstance(self._secondary_catalog_schema, FromEnv):
+            return self._secondary_catalog_schema.get_or_raise()
+        return self._secondary_catalog_schema
 
 
 class DriverQuirks(abc.ABC):
@@ -149,7 +176,13 @@ class DriverQuirks(abc.ABC):
         return "?"
 
     def drop_table(
-        self, *, table_name: str, if_exists: bool = True, temporary: bool = False
+        self,
+        *,
+        table_name: str,
+        schema_name: str | None = None,
+        catalog_name: str | None = None,
+        if_exists: bool = True,
+        temporary: bool = False,
     ) -> str:
         """
         Drop a table.
@@ -160,6 +193,12 @@ class DriverQuirks(abc.ABC):
             The cursor to execute the query.
         table_name : str
             The name of the table to drop.
+        schema_name : str, optional
+            The schema containing the table (if not given, assume current
+            schema).
+        catalog_name : str, optional
+            The catalog containing the table (if not given, assume current
+            catalog).
         if_exists : bool
             If True, do not raise an error if the table does not exist.
         temporary : bool
@@ -167,10 +206,14 @@ class DriverQuirks(abc.ABC):
         """
         if temporary:
             raise NotImplementedError
+
+        name = ".".join(
+            [part for part in (catalog_name, schema_name, table_name) if part]
+        )
         if if_exists:
-            return f"DROP TABLE IF EXISTS {table_name}"
+            return f"DROP TABLE IF EXISTS {name}"
         else:
-            return f"DROP TABLE {table_name}"
+            return f"DROP TABLE {name}"
 
     @abc.abstractmethod
     def is_table_not_found(self, table_name: str, error: Exception) -> bool:

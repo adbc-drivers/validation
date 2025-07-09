@@ -34,18 +34,17 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
     combinations = []
 
-    if metafunc.definition.name == "test_not_null":
-        metafunc.parametrize(
-            "driver",
-            [pytest.param(quirks.name, id=quirks.name)],
-            scope="module",
-            indirect=["driver"],
-        )
-        return
-
-    if metafunc.definition.name == "test_temporary":
+    if (
+        enabled := {
+            "test_not_null": True,
+            "test_temporary": quirks.features.statement_bulk_ingest_temporary,
+            "test_schema": quirks.features.statement_bulk_ingest_schema,
+            "test_catalog": quirks.features.statement_bulk_ingest_catalog,
+        }.get(metafunc.definition.name, None)
+        is not None
+    ):
         marks = []
-        if not quirks.features.statement_bulk_ingest_temporary:
+        if not enabled:
             marks.append(pytest.mark.skip(reason="not implemented"))
 
         metafunc.parametrize(
@@ -391,3 +390,76 @@ class TestIngest:
 
         compare.compare_tables(data1, result_temporary)
         compare.compare_tables(data2, result_normal)
+
+    def test_schema(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        data = pyarrow.Table.from_pydict(
+            {
+                "idx": [1, 2, 3],
+                "value": ["foo", "bar", "baz"],
+            }
+        )
+        table_name = "test_ingest_schema"
+        schema_name = driver.features.secondary_schema
+        with conn.cursor() as cursor:
+            cursor.execute(
+                driver.drop_table(
+                    table_name=table_name,
+                    schema_name=schema_name,
+                )
+            )
+            cursor.adbc_ingest(
+                table_name,
+                data,
+                db_schema_name=schema_name,
+            )
+
+        select = f"SELECT idx, value FROM {schema_name}.{table_name} ORDER BY idx ASC"
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(select)
+            handle, _ = cursor.adbc_statement.execute_query()
+            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                result = reader.read_all()
+
+        compare.compare_tables(data, result)
+
+    def test_catalog(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        data = pyarrow.Table.from_pydict(
+            {
+                "idx": [1, 2, 3],
+                "value": ["foo", "bar", "baz"],
+            }
+        )
+        table_name = "test_ingest_catalog"
+        schema_name = driver.features.secondary_catalog_schema
+        catalog_name = driver.features.secondary_catalog
+        with conn.cursor() as cursor:
+            cursor.execute(
+                driver.drop_table(
+                    table_name=table_name,
+                    schema_name=schema_name,
+                    catalog_name=catalog_name,
+                )
+            )
+            cursor.adbc_ingest(
+                table_name,
+                data,
+                db_schema_name=schema_name,
+                catalog_name=catalog_name,
+            )
+
+        select = f"SELECT idx, value FROM {catalog_name}.{schema_name}.{table_name} ORDER BY idx ASC"
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(select)
+            handle, _ = cursor.adbc_statement.execute_query()
+            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                result = reader.read_all()
+
+        compare.compare_tables(data, result)
