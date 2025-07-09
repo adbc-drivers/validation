@@ -67,7 +67,7 @@ def manual_test() -> None:
         pytest.skip("Skipping manual test, set RUN_MANUAL_TESTS=1")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def conn_factory(
     request,
     driver: model.DriverQuirks,

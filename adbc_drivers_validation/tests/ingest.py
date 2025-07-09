@@ -34,15 +34,13 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
     combinations = []
 
-    if (
-        enabled := {
-            "test_not_null": True,
-            "test_temporary": quirks.features.statement_bulk_ingest_temporary,
-            "test_schema": quirks.features.statement_bulk_ingest_schema,
-            "test_catalog": quirks.features.statement_bulk_ingest_catalog,
-        }.get(metafunc.definition.name, None)
-        is not None
-    ):
+    enabled = {
+        "test_not_null": True,
+        "test_temporary": quirks.features.statement_bulk_ingest_temporary,
+        "test_schema": quirks.features.statement_bulk_ingest_schema,
+        "test_catalog": quirks.features.statement_bulk_ingest_catalog,
+    }.get(metafunc.definition.name, None)
+    if enabled is not None:
         marks = []
         if not enabled:
             marks.append(pytest.mark.skip(reason="not implemented"))
