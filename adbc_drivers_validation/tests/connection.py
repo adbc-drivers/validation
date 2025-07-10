@@ -19,6 +19,8 @@ To use: import TestConnection and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import typing
+
 import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
@@ -60,14 +62,48 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
 
 class TestConnection:
     def test_current_catalog(
-        self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
     ) -> None:
         assert conn.adbc_current_catalog == driver.features.current_catalog
 
     def test_current_db_schema(
-        self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
     ) -> None:
         assert conn.adbc_current_db_schema == driver.features.current_schema
+
+    def test_set_current_catalog(
+        self,
+        driver: model.DriverQuirks,
+        conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+    ):
+        if not driver.features.connection_set_current_catalog:
+            pytest.skip("not implemented")
+
+        with conn_factory() as conn:
+            assert conn.adbc_current_catalog == driver.features.current_catalog
+            conn.adbc_current_catalog = driver.features.secondary_catalog
+            assert conn.adbc_current_catalog == driver.features.secondary_catalog
+            conn.adbc_current_catalog = driver.features.current_catalog
+            assert conn.adbc_current_catalog == driver.features.current_catalog
+
+    def test_set_current_schema(
+        self,
+        driver: model.DriverQuirks,
+        conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+    ):
+        if not driver.features.connection_set_current_schema:
+            pytest.skip("not implemented")
+
+        with conn_factory() as conn:
+            assert conn.adbc_current_db_schema == driver.features.current_schema
+            conn.adbc_current_db_schema = driver.features.secondary_schema
+            assert conn.adbc_current_db_schema == driver.features.secondary_schema
+            conn.adbc_current_db_schema = driver.features.current_schema
+            assert conn.adbc_current_db_schema == driver.features.current_schema
 
     def test_get_info(
         self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks

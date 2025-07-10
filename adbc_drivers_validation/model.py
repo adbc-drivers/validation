@@ -78,6 +78,8 @@ class DriverSetup:
 @dataclasses.dataclass
 class DriverFeatures:
     connection_get_table_schema: bool = False
+    connection_set_current_catalog: bool = False
+    connection_set_current_schema: bool = False
     connection_transactions: bool = False
     statement_bulk_ingest: bool = False
     statement_bulk_ingest_catalog: bool = False
@@ -97,6 +99,8 @@ class DriverFeatures:
         self,
         *,
         connection_get_table_schema=False,
+        connection_set_current_catalog=False,
+        connection_set_current_schema=False,
         connection_transactions=False,
         statement_bulk_ingest=False,
         statement_bulk_ingest_catalog=False,
@@ -113,6 +117,8 @@ class DriverFeatures:
         supported_xdbc_fields=None,
     ):
         self.connection_get_table_schema = connection_get_table_schema
+        self.connection_set_current_catalog = connection_set_current_catalog
+        self.connection_set_current_schema = connection_set_current_schema
         self.connection_transactions = connection_transactions
         self.statement_bulk_ingest = statement_bulk_ingest
         self.statement_bulk_ingest_catalog = statement_bulk_ingest_catalog
