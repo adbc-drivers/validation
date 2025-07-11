@@ -171,14 +171,17 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             with pytest.raises(adbc_driver_manager.dbapi.Error) as excinfo:
                 cursor.adbc_ingest(table_name, data, mode="append")
 
         assert driver.is_table_not_found(table_name, excinfo.value)
 
     def test_createappend(
-        self, conn: adbc_driver_manager.dbapi.Connection, query: Query
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.IngestQuery)
@@ -194,7 +197,7 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             cursor.adbc_ingest(table_name, data, mode="create_append")
             cursor.adbc_ingest(table_name, data2, mode="create_append")
 
