@@ -81,6 +81,10 @@ class DriverFeatures:
     connection_set_current_catalog: bool = False
     connection_set_current_schema: bool = False
     connection_transactions: bool = False
+    get_objects_constraints_check: bool = False
+    get_objects_constraints_foreign: bool = False
+    get_objects_constraints_primary: bool = False
+    get_objects_constraints_unique: bool = False
     statement_bulk_ingest: bool = False
     statement_bulk_ingest_catalog: bool = False
     statement_bulk_ingest_schema: bool = False
@@ -88,81 +92,23 @@ class DriverFeatures:
     statement_execute_schema: bool = False
     statement_get_parameter_schema: bool = False
     statement_prepare: bool = True
-    _current_catalog: str | FromEnv | None = None
-    _current_schema: str | FromEnv | None = None
-    _secondary_schema: str | FromEnv | None = None
-    _secondary_catalog: str | FromEnv | None = None
-    _secondary_catalog_schema: str | FromEnv | None = None
+    current_catalog: str | None = None
+    current_schema: str | None = None
+    secondary_schema: str | None = None
+    secondary_catalog: str | None = None
+    secondary_catalog_schema: str | None = None
     supported_xdbc_fields: list[str] = dataclasses.field(default_factory=list)
+    # Some vendors sort the columns, so declaring FOREIGN KEY(b, a) REFERENCES
+    # foo(d, c) still gets returned in the order (a, c), (b, d)
+    quirk_get_objects_constraints_foreign_normalized: bool = False
+    quirk_get_objects_constraints_primary_normalized: bool = False
+    quirk_get_objects_constraints_unique_normalized: bool = False
 
-    def __init__(
-        self,
-        *,
-        connection_get_table_schema=False,
-        connection_set_current_catalog=False,
-        connection_set_current_schema=False,
-        connection_transactions=False,
-        statement_bulk_ingest=False,
-        statement_bulk_ingest_catalog=False,
-        statement_bulk_ingest_schema=False,
-        statement_bulk_ingest_temporary=False,
-        statement_execute_schema=False,
-        statement_get_parameter_schema=False,
-        statement_prepare=True,
-        current_catalog=None,
-        current_schema=None,
-        secondary_schema=None,
-        secondary_catalog=None,
-        secondary_catalog_schema=None,
-        supported_xdbc_fields=None,
-    ):
-        self.connection_get_table_schema = connection_get_table_schema
-        self.connection_set_current_catalog = connection_set_current_catalog
-        self.connection_set_current_schema = connection_set_current_schema
-        self.connection_transactions = connection_transactions
-        self.statement_bulk_ingest = statement_bulk_ingest
-        self.statement_bulk_ingest_catalog = statement_bulk_ingest_catalog
-        self.statement_bulk_ingest_schema = statement_bulk_ingest_schema
-        self.statement_bulk_ingest_temporary = statement_bulk_ingest_temporary
-        self.statement_execute_schema = statement_execute_schema
-        self.statement_get_parameter_schema = statement_get_parameter_schema
-        self.statement_prepare = statement_prepare
-        self._current_catalog = current_catalog
-        self._current_schema = current_schema
-        self._secondary_schema = secondary_schema
-        self._secondary_catalog = secondary_catalog
-        self._secondary_catalog_schema = secondary_catalog_schema
-        self.supported_xdbc_fields = supported_xdbc_fields or []
-
-    @property
-    def current_catalog(self) -> str | None:
-        if isinstance(self._current_catalog, FromEnv):
-            return self._current_catalog.get_or_raise()
-        return self._current_catalog
-
-    @property
-    def current_schema(self) -> str | None:
-        if isinstance(self._current_schema, FromEnv):
-            return self._current_schema.get_or_raise()
-        return self._current_schema
-
-    @property
-    def secondary_schema(self) -> str | None:
-        if isinstance(self._secondary_schema, FromEnv):
-            return self._secondary_schema.get_or_raise()
-        return self._secondary_schema
-
-    @property
-    def secondary_catalog(self) -> str | None:
-        if isinstance(self._secondary_catalog, FromEnv):
-            return self._secondary_catalog.get_or_raise()
-        return self._secondary_catalog
-
-    @property
-    def secondary_catalog_schema(self) -> str | None:
-        if isinstance(self._secondary_catalog_schema, FromEnv):
-            return self._secondary_catalog_schema.get_or_raise()
-        return self._secondary_catalog_schema
+    def __init__(self, **kwargs) -> None:
+        for key, value in kwargs.items():
+            if isinstance(value, FromEnv):
+                value = value.get_or_raise()
+            setattr(self, key, value)
 
 
 class DriverQuirks(abc.ABC):

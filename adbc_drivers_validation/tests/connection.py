@@ -52,9 +52,20 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
             indirect=["driver"],
         )
     else:
+        marks = []
+        if (
+            enabled := {
+                "test_get_objects_constraints_check": quirks.features.get_objects_constraints_check,
+                "test_get_objects_constraints_foreign": quirks.features.get_objects_constraints_foreign,
+                "test_get_objects_constraints_primary": quirks.features.get_objects_constraints_primary,
+                "test_get_objects_constraints_unique": quirks.features.get_objects_constraints_unique,
+            }.get(metafunc.definition.name)
+        ) is not None:
+            if not enabled:
+                marks.append(pytest.mark.skip(reason="not implemented"))
         metafunc.parametrize(
             "driver",
-            [pytest.param(quirks.name, id=quirks.name)],
+            [pytest.param(quirks.name, id=quirks.name, marks=marks)],
             scope="module",
             indirect=["driver"],
         )
@@ -602,7 +613,8 @@ class TestConnection:
                 elif field == "xdbc_is_nullable":
                     assert column[field] == "YES"
 
-    def test_get_objects_constraints(
+    @pytest.fixture(scope="class")
+    def get_objects_constraints(
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
@@ -614,6 +626,7 @@ class TestConnection:
             "constraint_foreign_multi",
             "constraint_primary",
             "constraint_primary_multi",
+            "constraint_primary_multi2",
         )
         with conn.cursor() as cursor:
             for table in table_names:
@@ -622,12 +635,18 @@ class TestConnection:
             for stmt in driver.sample_ddl_constraints:
                 cursor.execute(stmt)
 
+    def get_constraints(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        table_filter: str,
+    ) -> dict[str, list[dict]]:
         objects = (
             conn.adbc_get_objects(
                 depth="columns",
                 catalog_filter=driver.features.current_catalog,
                 db_schema_filter=driver.features.current_schema,
-                table_name_filter="constraint_%",
+                table_name_filter=table_filter,
             )
             .read_all()
             .to_pylist()
@@ -638,11 +657,17 @@ class TestConnection:
             for schema in obj["catalog_db_schemas"]
             for table in schema["db_schema_tables"]
         }
-
-        assert set(tables) == set(table_names)
         for table, constraints in tables.items():
             assert constraints is not None, table
+        return tables
 
+    def test_get_objects_constraints_check(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        get_objects_constraints: None,
+    ) -> None:
+        tables = self.get_constraints(driver, conn, "constraint_check")
         assert len(tables["constraint_check"]) == 2
         constraints = list(
             sorted(
@@ -667,6 +692,81 @@ class TestConnection:
             },
         )
 
+    def test_get_objects_constraints_foreign(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        get_objects_constraints: None,
+    ) -> None:
+        tables = self.get_constraints(driver, conn, "constraint_foreign%")
+
+        assert len(tables["constraint_foreign"]) == 1, repr(tables)
+        compare.match_fields(
+            tables["constraint_foreign"][0],
+            {
+                "constraint_type": "FOREIGN KEY",
+                "constraint_column_names": ["b"],
+                "constraint_column_usage": [
+                    {
+                        "fk_catalog": driver.features.current_catalog,
+                        "fk_db_schema": driver.features.current_schema,
+                        "fk_table": "constraint_primary",
+                        "fk_column_name": "a",
+                    }
+                ],
+            },
+        )
+
+        # Some databases don't preserve the order of columns in a multi-column
+        # foreign key
+        assert len(tables["constraint_foreign_multi"]) == 1, repr(tables)
+        constraint = tables["constraint_foreign_multi"][0]
+        compare.match_fields(
+            constraint,
+            {"constraint_type": "FOREIGN KEY"},
+        )
+        cols = constraint["constraint_column_names"]
+        if driver.features.quirk_get_objects_constraints_foreign_normalized:
+            assert cols == ["b", "c"]
+            assert constraint["constraint_column_usage"] == [
+                {
+                    "fk_catalog": driver.features.current_catalog,
+                    "fk_db_schema": driver.features.current_schema,
+                    "fk_table": "constraint_primary_multi2",
+                    "fk_column_name": "b",
+                },
+                {
+                    "fk_catalog": driver.features.current_catalog,
+                    "fk_db_schema": driver.features.current_schema,
+                    "fk_table": "constraint_primary_multi2",
+                    "fk_column_name": "a",
+                },
+            ], repr(constraint)
+        else:
+            assert cols == ["c", "b"]
+            assert constraint["constraint_column_usage"] == [
+                {
+                    "fk_catalog": driver.features.current_catalog,
+                    "fk_db_schema": driver.features.current_schema,
+                    "fk_table": "constraint_primary_multi2",
+                    "fk_column_name": "a",
+                },
+                {
+                    "fk_catalog": driver.features.current_catalog,
+                    "fk_db_schema": driver.features.current_schema,
+                    "fk_table": "constraint_primary_multi2",
+                    "fk_column_name": "b",
+                },
+            ], repr(constraint)
+
+    def test_get_objects_constraints_primary(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        get_objects_constraints: None,
+    ) -> None:
+        tables = self.get_constraints(driver, conn, "constraint_primary%")
+
         assert len(tables["constraint_primary"]) == 1
         compare.match_fields(
             tables["constraint_primary"][0],
@@ -678,14 +778,37 @@ class TestConnection:
         )
 
         assert len(tables["constraint_primary_multi"]) == 1
+        constraint = tables["constraint_primary_multi"][0]
         compare.match_fields(
-            tables["constraint_primary_multi"][0],
+            constraint,
             {
                 "constraint_type": "PRIMARY KEY",
-                "constraint_column_names": ["a", "b"],
                 "constraint_column_usage": None,
             },
         )
+        if driver.features.quirk_get_objects_constraints_primary_normalized:
+            assert constraint["constraint_column_names"] == ["a", "b"]
+        else:
+            assert constraint["constraint_column_names"] == ["b", "a"]
+
+        assert len(tables["constraint_primary_multi2"]) == 1
+        constraint = tables["constraint_primary_multi2"][0]
+        compare.match_fields(
+            constraint,
+            {
+                "constraint_type": "PRIMARY KEY",
+                "constraint_column_usage": None,
+            },
+        )
+        assert constraint["constraint_column_names"] == ["a", "b"]
+
+    def test_get_objects_constraints_unique(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        get_objects_constraints: None,
+    ) -> None:
+        tables = self.get_constraints(driver, conn, "constraint_unique%")
 
         assert len(tables["constraint_unique"]) == 2
         constraints = list(
@@ -702,54 +825,19 @@ class TestConnection:
                 "constraint_column_usage": None,
             },
         )
+
+        # Even if declared as UNIQUE(c, b), some databases return [b, c]
         compare.match_fields(
             constraints[1],
             {
                 "constraint_type": "UNIQUE",
-                "constraint_column_names": ["b", "c"],
                 "constraint_column_usage": None,
             },
         )
-
-        assert len(tables["constraint_foreign"]) == 1
-        compare.match_fields(
-            tables["constraint_foreign"][0],
-            {
-                "constraint_type": "FOREIGN KEY",
-                "constraint_column_names": ["b"],
-                "constraint_column_usage": [
-                    {
-                        "fk_catalog": "master",
-                        "fk_db_schema": "dbo",
-                        "fk_table": "constraint_primary",
-                        "fk_column_name": "a",
-                    }
-                ],
-            },
-        )
-
-        assert len(tables["constraint_foreign_multi"]) == 1
-        compare.match_fields(
-            tables["constraint_foreign_multi"][0],
-            {
-                "constraint_type": "FOREIGN KEY",
-                "constraint_column_names": ["b", "c"],
-                "constraint_column_usage": [
-                    {
-                        "fk_catalog": "master",
-                        "fk_db_schema": "dbo",
-                        "fk_table": "constraint_primary_multi",
-                        "fk_column_name": "a",
-                    },
-                    {
-                        "fk_catalog": "master",
-                        "fk_db_schema": "dbo",
-                        "fk_table": "constraint_primary_multi",
-                        "fk_column_name": "b",
-                    },
-                ],
-            },
-        )
+        if driver.features.quirk_get_objects_constraints_unique_normalized:
+            assert constraints[1]["constraint_column_names"] == ["b", "c"]
+        else:
+            assert constraints[1]["constraint_column_names"] == ["c", "b"]
 
     def test_get_table_schema(
         self,
