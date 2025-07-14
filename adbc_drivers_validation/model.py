@@ -92,11 +92,11 @@ class DriverFeatures:
     statement_execute_schema: bool = False
     statement_get_parameter_schema: bool = False
     statement_prepare: bool = True
-    current_catalog: str | None = None
-    current_schema: str | None = None
-    secondary_schema: str | None = None
-    secondary_catalog: str | None = None
-    secondary_catalog_schema: str | None = None
+    _current_catalog: str | FromEnv | None = None
+    _current_schema: str | FromEnv | None = None
+    _secondary_schema: str | FromEnv | None = None
+    _secondary_catalog: str | FromEnv | None = None
+    _secondary_catalog_schema: str | FromEnv | None = None
     supported_xdbc_fields: list[str] = dataclasses.field(default_factory=list)
     # Some vendors sort the columns, so declaring FOREIGN KEY(b, a) REFERENCES
     # foo(d, c) still gets returned in the order (a, c), (b, d)
@@ -106,9 +106,45 @@ class DriverFeatures:
 
     def __init__(self, **kwargs) -> None:
         for key, value in kwargs.items():
-            if isinstance(value, FromEnv):
-                value = value.get_or_raise()
+            if key in {
+                "current_catalog",
+                "current_schema",
+                "secondary_schema",
+                "secondary_catalog",
+                "secondary_catalog_schema",
+            }:
+                key = "_" + key
             setattr(self, key, value)
+
+    @property
+    def current_catalog(self) -> str | None:
+        if isinstance(self._current_catalog, FromEnv):
+            return self._current_catalog.get_or_raise()
+        return self._current_catalog
+
+    @property
+    def current_schema(self) -> str | None:
+        if isinstance(self._current_schema, FromEnv):
+            return self._current_schema.get_or_raise()
+        return self._current_schema
+
+    @property
+    def secondary_schema(self) -> str | None:
+        if isinstance(self._secondary_schema, FromEnv):
+            return self._secondary_schema.get_or_raise()
+        return self._secondary_schema
+
+    @property
+    def secondary_catalog(self) -> str | None:
+        if isinstance(self._secondary_catalog, FromEnv):
+            return self._secondary_catalog.get_or_raise()
+        return self._secondary_catalog
+
+    @property
+    def secondary_catalog_schema(self) -> str | None:
+        if isinstance(self._secondary_catalog_schema, FromEnv):
+            return self._secondary_catalog_schema.get_or_raise()
+        return self._secondary_catalog_schema
 
 
 class DriverQuirks(abc.ABC):
