@@ -602,6 +602,155 @@ class TestConnection:
                 elif field == "xdbc_is_nullable":
                     assert column[field] == "YES"
 
+    def test_get_objects_constraints(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        table_names = (
+            "constraint_check",
+            "constraint_unique",
+            "constraint_foreign",
+            "constraint_foreign_multi",
+            "constraint_primary",
+            "constraint_primary_multi",
+        )
+        with conn.cursor() as cursor:
+            for table in table_names:
+                cursor.execute(driver.drop_table(table_name=table))
+
+            for stmt in driver.sample_ddl_constraints:
+                cursor.execute(stmt)
+
+        objects = (
+            conn.adbc_get_objects(
+                depth="columns",
+                catalog_filter=driver.features.current_catalog,
+                db_schema_filter=driver.features.current_schema,
+                table_name_filter="constraint_%",
+            )
+            .read_all()
+            .to_pylist()
+        )
+        tables = {
+            table["table_name"]: table["table_constraints"]
+            for obj in objects
+            for schema in obj["catalog_db_schemas"]
+            for table in schema["db_schema_tables"]
+        }
+
+        assert set(tables) == set(table_names)
+        for table, constraints in tables.items():
+            assert constraints is not None, table
+
+        assert len(tables["constraint_check"]) == 2
+        constraints = list(
+            sorted(
+                tables["constraint_check"],
+                key=lambda x: len(x["constraint_column_names"]),
+            )
+        )
+        compare.match_fields(
+            constraints[0],
+            {
+                "constraint_type": "CHECK",
+                "constraint_column_names": [],
+                "constraint_column_usage": None,
+            },
+        )
+        compare.match_fields(
+            constraints[1],
+            {
+                "constraint_type": "CHECK",
+                "constraint_column_names": ["a"],
+                "constraint_column_usage": None,
+            },
+        )
+
+        assert len(tables["constraint_primary"]) == 1
+        compare.match_fields(
+            tables["constraint_primary"][0],
+            {
+                "constraint_type": "PRIMARY KEY",
+                "constraint_column_names": ["a"],
+                "constraint_column_usage": None,
+            },
+        )
+
+        assert len(tables["constraint_primary_multi"]) == 1
+        compare.match_fields(
+            tables["constraint_primary_multi"][0],
+            {
+                "constraint_type": "PRIMARY KEY",
+                "constraint_column_names": ["a", "b"],
+                "constraint_column_usage": None,
+            },
+        )
+
+        assert len(tables["constraint_unique"]) == 2
+        constraints = list(
+            sorted(
+                tables["constraint_unique"],
+                key=lambda x: len(x["constraint_column_names"]),
+            )
+        )
+        compare.match_fields(
+            constraints[0],
+            {
+                "constraint_type": "UNIQUE",
+                "constraint_column_names": ["a"],
+                "constraint_column_usage": None,
+            },
+        )
+        compare.match_fields(
+            constraints[1],
+            {
+                "constraint_type": "UNIQUE",
+                "constraint_column_names": ["b", "c"],
+                "constraint_column_usage": None,
+            },
+        )
+
+        assert len(tables["constraint_foreign"]) == 1
+        compare.match_fields(
+            tables["constraint_foreign"][0],
+            {
+                "constraint_type": "FOREIGN KEY",
+                "constraint_column_names": ["b"],
+                "constraint_column_usage": [
+                    {
+                        "fk_catalog": "master",
+                        "fk_db_schema": "dbo",
+                        "fk_table": "constraint_primary",
+                        "fk_column_name": "a",
+                    }
+                ],
+            },
+        )
+
+        assert len(tables["constraint_foreign_multi"]) == 1
+        compare.match_fields(
+            tables["constraint_foreign_multi"][0],
+            {
+                "constraint_type": "FOREIGN KEY",
+                "constraint_column_names": ["b", "c"],
+                "constraint_column_usage": [
+                    {
+                        "fk_catalog": "master",
+                        "fk_db_schema": "dbo",
+                        "fk_table": "constraint_primary_multi",
+                        "fk_column_name": "a",
+                    },
+                    {
+                        "fk_catalog": "master",
+                        "fk_db_schema": "dbo",
+                        "fk_table": "constraint_primary_multi",
+                        "fk_column_name": "b",
+                    },
+                ],
+            },
+        )
+
     def test_get_table_schema(
         self,
         driver: model.DriverQuirks,

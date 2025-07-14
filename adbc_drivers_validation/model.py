@@ -234,6 +234,11 @@ class DriverQuirks(abc.ABC):
         """
         raise NotImplementedError
 
+    @property
+    def sample_ddl_constraints(self) -> list[str]:
+        """CREATE TABLE statements with unique/foreign/primary keys."""
+        raise NotImplementedError
+
     def split_statement(self, statement: str) -> list[str]:
         """
         Split a SQL statement into individual statements.
