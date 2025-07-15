@@ -62,6 +62,24 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
 
 
 class TestStatement:
+    def test_parameter_execute(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        # N.B. no need to test execute_update since the regular bind tests
+        # cover that
+        parameters = pyarrow.RecordBatch.from_pydict({"0": [1, 2, 3, 4]})
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(
+                f"SELECT 1 + {driver.bind_parameter(1)}"
+            )
+            cursor.adbc_statement.bind(parameters)
+            cursor.adbc_statement.prepare()
+            handle, _ = cursor.adbc_statement.execute_query()
+            result = pyarrow.RecordBatchReader._import_from_c(handle.address).read_all()
+        assert result[0].to_pylist() == [2, 3, 4, 5]
+
     def test_parameter_schema(
         self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
     ) -> None:
