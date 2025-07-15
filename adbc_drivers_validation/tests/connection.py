@@ -39,6 +39,7 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
                 continue
             elif not quirks.features.connection_get_table_schema:
                 marks.append(pytest.mark.skip(reason="not implemented"))
+            marks.extend(query.pytest_marks)
 
             combinations.append(
                 pytest.param(
