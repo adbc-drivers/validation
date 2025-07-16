@@ -126,5 +126,4 @@ class TestQuery:
         with conn.cursor() as cursor:
             schema = cursor.adbc_execute_schema(sql)
 
-        schema = compare.make_nullable(schema)
-        assert schema == expected_schema
+        compare.compare_schemas(expected_schema, schema)

@@ -40,13 +40,25 @@ def make_nullable(value: T) -> T:
                 if isinstance(field.type, pyarrow.StructType):
                     field_type = pyarrow.struct(
                         [
-                            pyarrow.field(child.name, child.type, nullable=True)
+                            pyarrow.field(
+                                child.name,
+                                child.type,
+                                nullable=True,
+                                metadata=child.metadata,
+                            )
                             for child in field.type.fields
                         ]
                     )
-                    fields.append(pyarrow.field(field.name, field_type, nullable=True))
+                    fields.append(
+                        pyarrow.field(
+                            field.name,
+                            field_type,
+                            nullable=True,
+                            metadata=field.metadata,
+                        )
+                    )
                 else:
-                    fields.append(pyarrow.field(field.name, field.type, nullable=True))
+                    fields.append(field)
             return pyarrow.schema(fields)
         case pyarrow.Table():
             schema = make_nullable(value.schema)
@@ -111,6 +123,80 @@ def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
     return rows
 
 
+def compare_fields(
+    expected: pyarrow.Field, actual: pyarrow.Field, field_path: tuple[str] = ()
+) -> None:
+    path = ".".join(field_path)
+    if field_path:
+        path += "."
+
+    # IMO, this is a design flaw in PyArrow/Arrow C++ (but is not a flaw in
+    # Nanoarrow/Arrow Java): child fields are part of the _type_. So to
+    # generically manipulate a field like we want to do here, we have to know
+    # the type of the field.  It would help if there were accessors to list
+    # the children for us based on the type, instead of having to hardcode
+    # this knowledge all over the place.
+
+    assert expected.name == actual.name, (
+        f"Field names do not match: {path}{expected.name} != {path}{actual.name}"
+    )
+    # TODO: we should compare type.id, then manually recurse into child fields
+    # and provide field_path so that we can have a nicer diff of nested types.
+    # But this is all much more annoying than necessary (also because there's
+    # no built in to stringify type.id)
+
+    expected_type = expected.type
+    expected_extension_name = (expected.metadata or {}).get(
+        b"ARROW:extension:name", None
+    )
+    expected_extension_metadata = (expected.metadata or {}).get(
+        b"ARROW:extension:metadata", None
+    )
+
+    actual_type = actual.type
+    actual_extension_name = (actual.metadata or {}).get(b"ARROW:extension:name", None)
+    actual_extension_metadata = (actual.metadata or {}).get(
+        b"ARROW:extension:metadata", None
+    )
+    # Another design flaw in PyArrow is that JsonType isn't a subclass of
+    # ExtensionType.
+    if isinstance(expected_type, (pyarrow.ExtensionType, pyarrow.BaseExtensionType)):
+        # NOTE: another flaw is that there's no public way to get the
+        # extension metadata anymore.
+        expected_extension_name = expected_type.extension_name.encode("utf-8")
+        expected_type = expected_type.storage_type
+    if isinstance(actual_type, (pyarrow.ExtensionType, pyarrow.BaseExtensionType)):
+        actual_extension_name = actual_type.extension_name.encode("utf-8")
+        actual_type = actual_type.storage_type
+
+    assert expected_type == actual_type, (
+        f"Field types do not match: {path}{expected.name} ({expected_type}) != {path}{actual.name} ({actual_type})"
+    )
+    assert expected.nullable == actual.nullable, (
+        f"Field nullability does not match: {path}{expected.name} ({expected.nullable}) != {path}{actual.name} ({actual.nullable})"
+    )
+
+    assert expected_extension_name == actual_extension_name, (
+        f"Field extension names do not match: {path}{expected.name} ({expected_extension_name}) != {path}{actual.name} ({actual_extension_name})"
+    )
+
+    assert expected_extension_metadata == actual_extension_metadata, (
+        f"Field extension metadata does not match: {path}{expected.name} ({expected_extension_metadata}) != {path}{actual.name} ({actual_extension_metadata})"
+    )
+
+
+def compare_schemas(
+    expected: pyarrow.Schema,
+    actual: pyarrow.Schema,
+) -> None:
+    expected = make_nullable(expected)
+    actual = make_nullable(actual)
+    assert len(expected) == len(actual), "Schemas do not match"
+
+    for expected_field, actual_field in zip(expected, actual):
+        compare_fields(expected_field, actual_field, ())
+
+
 def compare_tables(
     expected: pyarrow.Table,
     actual: pyarrow.Table,
@@ -125,6 +211,7 @@ def compare_tables(
         expected = expected.sort_by(sort_keys)
         actual = actual.sort_by(sort_keys)
 
+    compare_schemas(expected.schema, actual.schema)
     if expected != actual:
         # XXX: to_pylist uses the wrong object for times, losing precision...
         expected_repr = repr(expected.schema).splitlines() + [
