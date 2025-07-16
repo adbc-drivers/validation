@@ -42,6 +42,33 @@ def test_parse_int32_schema():
     assert parsed_schema.field("res").nullable
 
 
+def test_parse_extension_schema():
+    f = io.StringIO("""
+{
+    "format": "+s",
+    "children": [
+        {
+            "name": "res",
+            "format": "u",
+            "flags": ["nullable"],
+            "metadata": {
+                "ARROW:extension:name": "geoarrow.wkt"
+            }
+        }
+    ]
+}
+    """)
+    parsed_schema = arrowjson.load_schema(f)
+
+    assert len(parsed_schema) == 1
+    assert parsed_schema.names == ["res"]
+    assert parsed_schema.types[0] == pyarrow.string()
+    assert parsed_schema.field("res").nullable
+    assert parsed_schema.field("res").metadata == {
+        b"ARROW:extension:name": b"geoarrow.wkt"
+    }
+
+
 def test_parse_type_format_primitives():
     assert arrowjson.parse_type_format("n") == pyarrow.null()
     assert arrowjson.parse_type_format("b") == pyarrow.bool_()

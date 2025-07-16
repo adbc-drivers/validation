@@ -66,7 +66,14 @@ def table_from_rows(rows: list[dict], schema: pyarrow.Schema) -> pyarrow.Table:
         if row:
             raise ValueError(f"Extra fields in row: {row}")
 
-    return pyarrow.Table.from_pydict(cols, schema=schema)
+    table = pyarrow.Table.from_pydict(cols, schema=schema)
+    # Need to round-trip this through IPC to "fix" the extension fields, since
+    # PyArrow makes manipulating them generically a _giant_ pain. (IMO,
+    # modeling them as a distinct "type" was a mistake...)
+    table = pyarrow.RecordBatchReader._import_from_c_capsule(
+        table.__arrow_c_stream__()
+    ).read_all()
+    return table
 
 
 def schema_from_dict(source: dict) -> pyarrow.Schema:
@@ -94,6 +101,7 @@ def field_from_dict(source: dict) -> pyarrow.Field:
     type_format = source["format"]
     flags = source.get("flags", [])
     children = source.get("children", None)
+    metadata = source.get("metadata", None)
 
     # Must go bottom-up because PyArrow nests child fields into the types
     child_fields = None
@@ -103,7 +111,9 @@ def field_from_dict(source: dict) -> pyarrow.Field:
     data_type = parse_type_format(type_format, child_fields)
     nullable = "nullable" in flags
 
-    return pyarrow.field(name, data_type, nullable)
+    # Note that we treat extension types as regular types with metadata and
+    # not their "real" type
+    return pyarrow.field(name, data_type, nullable, metadata)
 
 
 def parse_type_format(

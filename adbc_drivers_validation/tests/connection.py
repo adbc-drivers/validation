@@ -859,5 +859,4 @@ class TestConnection:
                 cursor.adbc_statement.execute_update()
 
         schema = conn.adbc_get_table_schema("test_table_schema")
-        result = compare.make_nullable(schema)
-        assert result == expected_schema
+        compare.compare_schemas(expected_schema, schema)
