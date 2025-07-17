@@ -33,8 +33,9 @@ def test_compare_fields():
         "a",
         pyarrow.int32(),
         nullable=True,
-        metadata={"ARROW:extension:metadata": "value"},
+        metadata={"ARROW:extension:name": "value"},
     )
+    f6 = pyarrow.ipc.read_schema(pyarrow.schema([f6]).serialize())[0]
 
     compare.compare_fields(f1, f1)
     compare.compare_fields(f2, f2)

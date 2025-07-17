@@ -32,47 +32,84 @@ def load_table(source: typing.TextIO, schema: pyarrow.Schema) -> pyarrow.Table:
     return table_from_rows(rows, schema)
 
 
-def table_from_rows(rows: list[dict], schema: pyarrow.Schema) -> pyarrow.Table:
-    cols = {}
-    for field in schema:
+def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
+    if not field.nullable and any(value is None for value in values):
+        raise ValueError(
+            f"Field '{field.name}' is not nullable but contains None values"
+        )
+
+    if pyarrow.types.is_binary(field.type):
+        values = [
+            base64.b64decode(value) if value is not None else None for value in values
+        ]
+    elif pyarrow.types.is_decimal(field.type):
+        return pyarrow.array(values, type=pyarrow.string()).cast(field.type)
+    elif field.type.id == 37:
+        # month_day_nano
+        # format: 0M0d0ns
+        parsed_values = []
+        for value in values:
+            if value is None:
+                parsed_values.append(None)
+            else:
+                match = month_day_nano_regexp.match(value)
+                if not match:
+                    raise ValueError(f"Invalid month_day_nano value: {value}")
+                months, days, nanos = map(int, match.groups())
+                parsed_values.append(pyarrow.MonthDayNano([months, days, nanos]))
+        values = parsed_values
+    # XXX(https://github.com/apache/arrow/issues/47123)
+    elif isinstance(field.type, (pyarrow.ExtensionType, pyarrow.BaseExtensionType)):
+        storage_type = field.type.storage_type
+        arr = array_from_values(
+            values, pyarrow.field(field.name, storage_type, field.nullable)
+        )
+        return field.type.wrap_array(arr)
+    elif isinstance(field.type, pyarrow.ListType):
+        # We have to synthesize it manually because of extension types
+        offsets = [0]
+        backing = []
+        mask = []
+        for value in values:
+            if value is None:
+                offsets.append(offsets[-1])
+                mask.append(True)
+            else:
+                backing.extend(value)
+                offsets.append(offsets[-1] + len(value))
+                mask.append(False)
+        backing = array_from_values(backing, field.type.value_field)
+        return pyarrow.ListArray.from_arrays(
+            pyarrow.array(offsets, type=pyarrow.int32()),
+            backing,
+            type=field.type,
+            mask=pyarrow.array(mask, type=pyarrow.bool_()) if field.nullable else None,
+        )
+    elif isinstance(field.type, pyarrow.StructType):
+        children = structlike_from_rows(values, field.type.fields)
+        return pyarrow.StructArray.from_arrays(children, type=field.type)
+    return pyarrow.array(values, type=field.type)
+
+
+def structlike_from_rows(
+    rows: list[dict], fields: list[pyarrow.Field]
+) -> list[pyarrow.Array]:
+    cols = []
+    for field in fields:
         values = [row.pop(field.name, None) for row in rows]
-
-        if pyarrow.types.is_binary(field.type):
-            values = [
-                base64.b64decode(value) if value is not None else None
-                for value in values
-            ]
-        elif pyarrow.types.is_decimal(field.type):
-            values = pyarrow.array(values, type=pyarrow.string())
-            values = values.cast(field.type)
-        elif field.type.id == 37:
-            # month_day_nano
-            # format: 0M0d0ns
-            parsed_values = []
-            for value in values:
-                if value is None:
-                    parsed_values.append(None)
-                else:
-                    match = month_day_nano_regexp.match(value)
-                    if not match:
-                        raise ValueError(f"Invalid month_day_nano value: {value}")
-                    months, days, nanos = map(int, match.groups())
-                    parsed_values.append(pyarrow.MonthDayNano([months, days, nanos]))
-            values = parsed_values
-
-        cols[field.name] = pyarrow.array(values, type=field.type)
+        array = array_from_values(values, field)
+        cols.append(array)
 
     for row in rows:
         if row:
             raise ValueError(f"Extra fields in row: {row}")
 
-    table = pyarrow.Table.from_pydict(cols, schema=schema)
-    # Need to round-trip this through IPC to "fix" the extension fields, since
-    # PyArrow makes manipulating them generically a _giant_ pain. (IMO,
-    # modeling them as a distinct "type" was a mistake...)
-    table = pyarrow.RecordBatchReader._import_from_c_capsule(
-        table.__arrow_c_stream__()
-    ).read_all()
+    return cols
+
+
+def table_from_rows(rows: list[dict], schema: pyarrow.Schema) -> pyarrow.Table:
+    cols = structlike_from_rows(rows, list(schema))
+    table = pyarrow.Table.from_arrays(cols, schema=schema)
     return table
 
 
@@ -112,8 +149,14 @@ def field_from_dict(source: dict) -> pyarrow.Field:
     nullable = "nullable" in flags
 
     # Note that we treat extension types as regular types with metadata and
-    # not their "real" type
-    return pyarrow.field(name, data_type, nullable, metadata)
+    # not their "real" type for convenience. This breaks PyArrow since (of
+    # course) extension types don't compare equal to their "physical"
+    # representation as they are treated as distinct types (even though they
+    # aren't quite types). To fix this, round trip through IPC to "restore"
+    # things.
+    field = pyarrow.field(name, data_type, nullable, metadata)
+    schema = pyarrow.schema([field])
+    return pyarrow.ipc.read_schema(schema.serialize())[0]
 
 
 def parse_type_format(
