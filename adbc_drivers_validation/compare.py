@@ -145,7 +145,27 @@ def compare_fields(
     # But this is all much more annoying than necessary (also because there's
     # no built in to stringify type.id)
 
-    expected_type = expected.type
+    assert expected.type == actual.type, (
+        f"Field types do not match: {path}{expected.name} ({expected.type}) != {path}{actual.name} ({actual.type})"
+    )
+    assert expected.nullable == actual.nullable, (
+        f"Field nullability does not match: {path}{expected.name} ({expected.nullable}) != {path}{actual.name} ({actual.nullable})"
+    )
+
+    # Another design flaw in PyArrow is that there is apparently no generic
+    # extension type, so an extension type that isn't registered gets
+    # invisibly treated as the storage type.  Also because extension types are
+    # really just metadata, they silently compare equal.  (It's a little
+    # inconsistent: are extension types separate types or not?  The global
+    # registry also has shades of the Protobuf issues; an explicit registry is
+    # probably more annoying but would be preferable personally so that I
+    # don't have to handle both treatments of extension types here.  Either I
+    # want no extension types or I want all extension types, instead I have to
+    # handle it both ways.)
+
+    # There's no need to handle ExtensionType/BaseExtensionType here
+    # explicitly.  They would have compared equal or unequal already.  This is
+    # only to handle normal-types-with-invisible-extension-metadata.
     expected_extension_name = (expected.metadata or {}).get(
         b"ARROW:extension:name", None
     )
@@ -153,27 +173,9 @@ def compare_fields(
         b"ARROW:extension:metadata", None
     )
 
-    actual_type = actual.type
     actual_extension_name = (actual.metadata or {}).get(b"ARROW:extension:name", None)
     actual_extension_metadata = (actual.metadata or {}).get(
         b"ARROW:extension:metadata", None
-    )
-    # Another design flaw in PyArrow is that JsonType isn't a subclass of
-    # ExtensionType.
-    if isinstance(expected_type, (pyarrow.ExtensionType, pyarrow.BaseExtensionType)):
-        # NOTE: another flaw is that there's no public way to get the
-        # extension metadata anymore.
-        expected_extension_name = expected_type.extension_name.encode("utf-8")
-        expected_type = expected_type.storage_type
-    if isinstance(actual_type, (pyarrow.ExtensionType, pyarrow.BaseExtensionType)):
-        actual_extension_name = actual_type.extension_name.encode("utf-8")
-        actual_type = actual_type.storage_type
-
-    assert expected_type == actual_type, (
-        f"Field types do not match: {path}{expected.name} ({expected_type}) != {path}{actual.name} ({actual_type})"
-    )
-    assert expected.nullable == actual.nullable, (
-        f"Field nullability does not match: {path}{expected.name} ({expected.nullable}) != {path}{actual.name} ({actual.nullable})"
     )
 
     assert expected_extension_name == actual_extension_name, (

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import io
 
 import pyarrow
@@ -164,3 +165,64 @@ def test_load_table_extra_fields():
     data = [{"a": 1, "b": 2}]
     with pytest.raises(ValueError, match="Extra fields in row: {'b': 2}"):
         arrowjson.table_from_rows(data, schema)
+
+
+@pytest.mark.parametrize(
+    "raw,field,expected",
+    [
+        pytest.param(
+            [0, 1, None],
+            pyarrow.field("int32", pyarrow.int32(), nullable=True),
+            pyarrow.array([0, 1, None], type=pyarrow.int32()),
+            id="int32",
+        ),
+        pytest.param(
+            [base64.b64encode(b"hello").decode("utf-8"), None],
+            pyarrow.field("binary", pyarrow.binary(), nullable=True),
+            pyarrow.array([b"hello", None], type=pyarrow.binary()),
+            id="binary",
+        ),
+    ],
+)
+def test_array_from_values(
+    raw: list, field: pyarrow.Field, expected: pyarrow.Array
+) -> None:
+    actual = arrowjson.array_from_values(raw, field)
+    assert actual == expected
+
+
+def test_array_from_values_list() -> None:
+    values = [None, [], ["{}"], ["{}", "false"]]
+    field = pyarrow.field(
+        "list_field",
+        pyarrow.list_(pyarrow.json_()),
+    )
+    actual = arrowjson.array_from_values(values, field)
+    expected = pyarrow.ListArray.from_arrays(
+        pyarrow.array([0, 0, 0, 1, 3], type=pyarrow.int32()),
+        pyarrow.json_().wrap_array(
+            pyarrow.array(["{}", "{}", "false"], type=pyarrow.string())
+        ),
+        type=field.type,
+        mask=pyarrow.array([True, False, False, False]),
+    )
+    assert actual == expected
+
+
+def test_array_from_values_struct() -> None:
+    values = [{"a": 1, "b": base64.b64encode(b"hello").decode("utf-8")}]
+    field = pyarrow.field(
+        "struct_field",
+        pyarrow.struct(
+            [
+                pyarrow.field("a", pyarrow.int32()),
+                pyarrow.field("b", pyarrow.binary()),
+            ]
+        ),
+    )
+    actual = arrowjson.array_from_values(values, field)
+    expected = pyarrow.array(
+        [{"a": 1, "b": b"hello"}],
+        type=field.type,
+    )
+    assert actual == expected
