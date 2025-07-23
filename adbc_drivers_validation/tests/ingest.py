@@ -35,7 +35,7 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     combinations = []
 
     enabled = {
-        "test_not_null": True,
+        "test_not_null": quirks.features.statement_bulk_ingest,
         "test_temporary": quirks.features.statement_bulk_ingest_temporary,
         "test_schema": quirks.features.statement_bulk_ingest_schema,
         "test_catalog": quirks.features.statement_bulk_ingest_catalog,

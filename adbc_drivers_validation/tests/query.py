@@ -35,6 +35,14 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     for query in queries.queries.values():
         marks = []
         marks.extend(query.pytest_marks)
+
+        if (
+            not quirks.features.statement_bind
+            and isinstance(query.query, model.SelectQuery)
+            and query.query.bind_query(quirks) is not None
+        ):
+            marks.append(pytest.mark.skip(reason="bind not supported"))
+
         if metafunc.definition.name == "test_execute_schema":
             if not isinstance(query.query, model.SelectQuery):
                 continue

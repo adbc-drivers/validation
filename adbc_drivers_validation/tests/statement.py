@@ -32,14 +32,20 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     combinations = []
 
     if (
-        metafunc.definition.name == "test_parameter_schema"
-        and not quirks.features.statement_get_parameter_schema
+        metafunc.definition.name == "test_parameter_execute"
+        and not quirks.features.statement_bind
     ):
-        marks.append(
-            pytest.mark.xfail(
-                raises=adbc_driver_manager.dbapi.NotSupportedError, strict=True
+        marks.append(pytest.mark.skip("bind not supported"))
+
+    if metafunc.definition.name == "test_parameter_schema":
+        if not quirks.features.statement_bind:
+            marks.append(pytest.mark.skip("bind not supported"))
+        elif not quirks.features.statement_get_parameter_schema:
+            marks.append(
+                pytest.mark.xfail(
+                    raises=adbc_driver_manager.dbapi.NotSupportedError, strict=True
+                )
             )
-        )
 
     if (
         metafunc.definition.name == "test_prepare"
