@@ -85,6 +85,7 @@ class DriverFeatures:
     get_objects_constraints_foreign: bool = False
     get_objects_constraints_primary: bool = False
     get_objects_constraints_unique: bool = False
+    statement_bind: bool = True
     statement_bulk_ingest: bool = False
     statement_bulk_ingest_catalog: bool = False
     statement_bulk_ingest_schema: bool = False
