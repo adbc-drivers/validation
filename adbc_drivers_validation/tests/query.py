@@ -34,6 +34,7 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     queries = model.query_set(quirks.queries_path)
     for query in queries.queries.values():
         marks = []
+        marks.extend(query.pytest_marks)
         if metafunc.definition.name == "test_execute_schema":
             if not isinstance(query.query, model.SelectQuery):
                 continue

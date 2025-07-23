@@ -16,7 +16,6 @@
 Generate user documentation based on validation suite results.
 """
 
-import argparse
 import collections
 import dataclasses
 import html
@@ -117,8 +116,10 @@ class DriverTypeTable:
         getattr(self, f"type_{category}").append((lhs, table_entry))
 
 
-def arrow_type_name(arrow_type, show_type_parameters=False):
+def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
     # Special handling (sometimes we want params, sometimes not)
+    if metadata and (ext := metadata[b"ARROW:extension:name"]):
+        return f"extension<{ext.decode('utf-8')}>"
     if show_type_parameters:
         return str(arrow_type)
     elif isinstance(arrow_type, pyarrow.Decimal128Type):
@@ -142,16 +143,13 @@ def render_to(sink: Path, template, kwargs) -> None:
     print("Generated", sink)
 
 
-def load_testcases() -> None:
+def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
     """Load test case data into DuckDB."""
-    report = xml.etree.ElementTree.parse(model.ROOT / "validation-report.xml").getroot()
-    drivers = set(model.drivers_to_test())
+    report = xml.etree.ElementTree.parse(results_path).getroot()
 
     testcases = []
     for testcase in report.findall(".//testsuite[@name='validation']/testcase"):
         module = testcase.get("classname")
-        if module in {"tests.test_arrowjson"}:
-            continue
         name = testcase.get("name")
         if "[" in name:
             name, _, _ = name.partition("[")
@@ -163,17 +161,13 @@ def load_testcases() -> None:
             properties[prop.get("name")] = prop.get("value")
 
         driver = properties["driver"]
-
-        if driver not in drivers:
-            continue
-
         query_name = properties.get("query")
         if query_name is None:
             query = None
             metadata = {}
             tags = {}
         else:
-            query = model.query_set(driver).queries[query_name]
+            query = query_set.queries[query_name]
             metadata = query.metadata()
             tags = metadata.get("tags", {})
 
@@ -189,7 +183,8 @@ def load_testcases() -> None:
 
         testcases.append(
             {
-                "test": name,
+                "test_module": module,
+                "test_name": name,
                 "test_result": test_result,
                 "driver": driver,
                 "query_name": query_name,
@@ -200,11 +195,12 @@ def load_testcases() -> None:
 
     schema = pyarrow.schema(
         [
-            pyarrow.field("test", pyarrow.string()),
+            pyarrow.field("test_module", pyarrow.string()),
+            pyarrow.field("test_name", pyarrow.string()),
             pyarrow.field("test_result", pyarrow.string()),
             pyarrow.field("driver", pyarrow.string()),
             pyarrow.field("query_name", pyarrow.string()),
-            # Actually JSON, but there's no standard extension type since PMC members rejected it
+            # Actually JSON
             pyarrow.field("tags", pyarrow.string()),
             pyarrow.field("properties", pyarrow.string()),
         ]
@@ -216,7 +212,8 @@ def load_testcases() -> None:
         """
         CREATE TABLE testcases AS
         SELECT
-          test,
+          test_module,
+          test_name,
           test_result,
           driver,
           query_name,
@@ -229,7 +226,7 @@ def load_testcases() -> None:
 
 def render(drivers: dict[str, DriverTypeTable], output_directory: Path) -> None:
     env = jinja2.Environment(
-        loader=jinja2.PackageLoader("validation"),
+        loader=jinja2.PackageLoader("adbc_drivers_validation"),
         autoescape=jinja2.select_autoescape(),
     )
     features_template = env.get_template("features.qmd")
@@ -242,11 +239,10 @@ def render(drivers: dict[str, DriverTypeTable], output_directory: Path) -> None:
         render_to(output, features_template, dataclasses.asdict(drivers[driver]))
 
 
-def generate_includes() -> None:
-    drivers = {
-        driver: DriverTypeTable(features=model.driver_manifest(driver).features)
-        for driver in model.drivers_to_test()
-    }
+def generate_includes(
+    quirks: model.DriverQuirks, query_set: model.QuerySet
+) -> dict[str, DriverTypeTable]:
+    drivers = {quirks.name: DriverTypeTable(features=quirks.features)}
 
     # Select type support
     type_tests = (
@@ -259,7 +255,7 @@ def generate_includes() -> None:
           ARRAY_AGG(query_name ORDER BY query_name ASC) AS query_names,
           ARRAY_AGG(tags ORDER BY query_name ASC) as tags,
         WHERE
-          test = 'test_query'
+          test_name = 'test_query'
           AND query_name NOT LIKE 'type/bind/%'
           AND (tags->>'sql-type-name') IS NOT NULL
         GROUP BY driver, tags->>'sql-type-name'
@@ -269,24 +265,28 @@ def generate_includes() -> None:
         .to_pylist()
     )
     for test_case in type_tests:
-        query_set = model.query_set(test_case["driver"]).queries
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
-            query = query_set[query_name]
+            query = query_set.queries[query_name]
             show_type_parameters = (
                 query.metadata()
                 .get("tags", {})
                 .get("show-arrow-type-parameters", False)
             )
-            for field in query.query.expected_schema():
-                arrow_type_names.add(
-                    arrow_type_name(
-                        field.type, show_type_parameters=show_type_parameters
-                    )
+            # Take the first field; some queries may select additional things
+            # like nested types to test how a type behaves in different
+            # contexts
+            field = query.query.expected_schema()[0]
+            arrow_type_names.add(
+                arrow_type_name(
+                    field.type,
+                    field.metadata,
+                    show_type_parameters=show_type_parameters,
                 )
+            )
         if len(arrow_type_names) != 1:
             raise NotImplementedError(
-                f"Can't handle a driver being inconsistent in its arrow type for a SQL type: {arrow_type_names}"
+                f"Driver is inconsistent in SQL to Arrow type: {test_case['sql_type']} => {arrow_type_names}"
             )
         sql_type = html.escape(test_case["sql_type"])
         arrow_type = html.escape(next(iter(arrow_type_names)))
@@ -305,7 +305,7 @@ def generate_includes() -> None:
           ARRAY_AGG(query_name ORDER BY query_name ASC) AS query_names,
           ARRAY_AGG(tags ORDER BY query_name ASC) as tags,
         WHERE
-          test = 'test_query'
+          test_name = 'test_query'
           AND query_name LIKE 'type/bind/%'
           AND (tags->>'sql-type-name') IS NOT NULL
         GROUP BY driver, tags->>'sql-type-name'
@@ -315,11 +315,10 @@ def generate_includes() -> None:
         .to_pylist()
     )
     for test_case in type_tests:
-        query_set = model.query_set(test_case["driver"]).queries
         arrow_type_names = {
             arrow_type_name(field.type)
             for query_name in test_case["query_names"]
-            for field in query_set[query_name].query.bind_schema()
+            for field in query_set.queries[query_name].query.bind_schema()
         }
         if len(arrow_type_names) != 1:
             raise NotImplementedError(
@@ -342,7 +341,8 @@ def generate_includes() -> None:
           query_name,
           tags
         WHERE
-          test = 'test_ingest_create'
+          test_module LIKE '%TestIngest'
+          AND test_name = 'test_create'
           AND (tags->>'sql-type-name') IS NOT NULL
           AND test_result != 'skipped'
         ORDER BY driver, query_name
@@ -351,10 +351,9 @@ def generate_includes() -> None:
         .to_pylist()
     )
     for test_case in type_tests:
-        query_set = model.query_set(test_case["driver"]).queries
         arrow_type = html.escape(
             arrow_type_name(
-                query_set[test_case["query_name"]].query.input_schema()[1].type
+                query_set.queries[test_case["query_name"]].query.input_schema()[1].type
             )
         )
         sql_type = html.escape(test_case["sql_type"])
@@ -376,19 +375,19 @@ def generate_includes() -> None:
       FROM testcases
       SELECT
         driver,
-        regexp_extract(test, 'test_get_objects_([a-z]+)', 1) AS test,
+        regexp_extract(test_name, 'test_get_objects_([a-z]+)', 1) AS test_name,
         test_result,
-      WHERE test LIKE 'test_get_objects_%'
+      WHERE test_name LIKE 'test_get_objects_%'
     )
     FROM get_objects_cases
-    SELECT driver, test, BOOL_AND(test_result = 'passed') AS supported
-    GROUP BY driver, test
+    SELECT driver, test_name, BOOL_AND(test_result = 'passed') AS supported
+    GROUP BY driver, test_name
     """)
         .arrow()
         .to_pylist()
     )
     for test_case in get_objects:
-        drivers[test_case["driver"]].get_objects[test_case["test"]] = test_case[
+        drivers[test_case["driver"]].get_objects[test_case["test_name"]] = test_case[
             "supported"
         ]
 
@@ -397,8 +396,8 @@ def generate_includes() -> None:
         duckdb.sql("""
     FROM testcases
     SELECT driver, CAST(COUNTIF(test_result = 'passed') AS BIGINT) AS supported_cases, COUNT() AS total_cases
-    WHERE test = 'test_get_table_schema'
-    GROUP BY driver, test
+    WHERE test_name = 'test_get_table_schema' AND test_result != 'skipped'
+    GROUP BY driver, test_name
     """)
         .arrow()
         .to_pylist()
@@ -415,19 +414,21 @@ def generate_includes() -> None:
       FROM testcases
       SELECT
         driver,
-        regexp_extract(test, 'test_ingest_([a-z]+)', 1) AS test,
+        test_name,
         test_result,
-      WHERE test LIKE 'test_ingest_%'
+      WHERE test_module LIKE '%TestIngest'
     )
     FROM ingest_cases
-    SELECT driver, test, BOOL_OR(test_result = 'passed') AS supported
-    GROUP BY driver, test
+    SELECT driver, test_name, BOOL_OR(test_result = 'passed') AS supported
+    GROUP BY driver, test_name
     """)
         .arrow()
         .to_pylist()
     )
     for test_case in ingest_types:
-        drivers[test_case["driver"]].ingest[test_case["test"]] = test_case["supported"]
+        ingest = drivers[test_case["driver"]].ingest
+        name = test_case["test_name"][5:]  # Strip 'test_' prefix
+        ingest[name] = test_case["supported"]
 
     # Custom features
     custom_features = (
@@ -467,19 +468,8 @@ def generate_includes() -> None:
     return drivers
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Generate documentation based on validation suite"
-    )
-    parser.add_argument(
-        "-o", "--output", help="Output directory", type=Path, required=True
-    )
-    args = parser.parse_args()
-
-    load_testcases()
-    drivers = generate_includes()
-    render(drivers, args.output)
-
-
-if __name__ == "__main__":
-    main()
+def generate(quirks: model.DriverQuirks, test_results: Path, output: Path) -> None:
+    query_set = model.query_set(quirks.queries_path)
+    load_testcases(test_results, query_set)
+    drivers = generate_includes(quirks, query_set)
+    render(drivers, output)
