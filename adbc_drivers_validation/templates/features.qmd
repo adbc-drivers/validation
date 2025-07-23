@@ -27,13 +27,13 @@
   </thead>
   <tbody>
     <tr>
-      <td rowspan="4">Bulk Ingestion</td>
+      <td rowspan="8">Bulk Ingestion</td>
       <td>Create</td>
       <td>{% if ingest["create"] %}✅{% else %}❌{% endif %}</td>
     </tr>
     <tr>
       <td>Append</td>
-      <td>{% if ingest["append"] %}✅{% else %}❌{% endif %}</td>
+      <td>{% if ingest["append"] and ingest["append_fail"] %}✅{% else %}❌{% endif %}</td>
     </tr>
     <tr>
       <td>Create/Append</td>
@@ -41,7 +41,23 @@
     </tr>
     <tr>
       <td>Replace</td>
-      <td>{% if ingest["replace"] %}✅{% else %}❌{% endif %}</td>
+      <td>{% if ingest["replace"] and ingest["replace_noop"] %}✅{% else %}❌{% endif %}</td>
+    </tr>
+    <tr>
+      <td>Temporary Table</td>
+      <td>{% if ingest["temporary"] %}✅{% else %}❌{% endif %}</td>
+    </tr>
+    <tr>
+      <td>Specify target catalog</td>
+      <td>{% if ingest["catalog"] %}✅{% else %}❌{% endif %}</td>
+    </tr>
+    <tr>
+      <td>Specify target schema</td>
+      <td>{% if ingest["schema"] %}✅{% else %}❌{% endif %}</td>
+    </tr>
+    <tr>
+      <td>Non-nullable fields are marked NOT NULL</td>
+      <td>{% if ingest["not_null"] %}✅{% else %}❌{% endif %}</td>
     </tr>
     <tr>
       <td rowspan="4">Catalog (GetObjects)</td>
