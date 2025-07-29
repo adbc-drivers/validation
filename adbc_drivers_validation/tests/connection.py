@@ -284,6 +284,8 @@ class TestConnection:
             for schema in obj["catalog_db_schemas"]
             for table in schema["db_schema_tables"]
         ]
+        for catalog, schema, table in tables:
+            assert table != ""
         assert list(sorted(set(tables))) == list(sorted(tables))
         assert table_id not in tables
 
