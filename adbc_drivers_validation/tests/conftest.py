@@ -79,6 +79,7 @@ def conn_factory(
 ) -> typing.Callable[[], adbc_driver_manager.dbapi.Connection]:
     db_kwargs = {}
     conn_kwargs = {}
+    stmt_kwargs = {}
 
     for k, v in driver.setup.database.items():
         if isinstance(v, model.FromEnv):
@@ -87,6 +88,14 @@ def conn_factory(
             db_kwargs[k] = os.environ[v.env]
         else:
             db_kwargs[k] = v
+
+    for k, v in driver.setup.statement.items():
+        if isinstance(v, model.FromEnv):
+            if v.env not in os.environ:
+                pytest.skip(f"Must set {v.env}")
+            stmt_kwargs[k] = os.environ[v.env]
+        else:
+            stmt_kwargs[k] = v
 
     def _factory():
         autocommit = True
@@ -100,7 +109,7 @@ def conn_factory(
 
         # Inject the default args here
         def _cursor(*args, **kwargs) -> adbc_driver_manager.dbapi.Cursor:
-            return make_cursor(adbc_stmt_kwargs=driver.setup.statement)
+            return make_cursor(adbc_stmt_kwargs=stmt_kwargs)
 
         conn.cursor = _cursor
         return conn
