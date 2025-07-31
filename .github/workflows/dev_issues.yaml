@@ -12,19 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Dev
+name: Issues Bot
 
 on:
-  pull_request: {}
-  push:
-    branches:
-      - main
+  issue_comment:
+    types:
+      - created
+      - edited
 
 permissions:
-  contents: read
+  issues: write
 
 jobs:
-  lint:
-    uses: adbc-drivers/dev/.github/workflows/dev.yaml@01806be538e2a08e5763fbd536c32582d33c184c
-    secrets:
-      pre_commit_ssh_private_key: ${{ secrets.DEV_DEPLOY_KEY }}
+  issue_assign:
+    uses: adbc-drivers/dev/.github/workflows/dev_issues.yaml@08f8fca0626bb2311389ce1cacd7f614bb9c84c3

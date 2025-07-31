@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Columnar Technologies, Inc.
+# Copyright (c) 2025 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Dev
-
-on:
-  pull_request: {}
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-
-jobs:
-  lint:
-    uses: adbc-drivers/dev/.github/workflows/dev.yaml@01806be538e2a08e5763fbd536c32582d33c184c
-    secrets:
-      pre_commit_ssh_private_key: ${{ secrets.DEV_DEPLOY_KEY }}
+* @lidavidm
