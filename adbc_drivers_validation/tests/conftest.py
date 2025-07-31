@@ -72,6 +72,13 @@ def manual_test() -> None:
 
 
 @pytest.fixture(scope="session")
+def noci() -> None:
+    """Tests that should not run on CI."""
+    if os.environ.get("CI") in {"1", "true", "yes"}:
+        pytest.skip("fails or should not run on CI")
+
+
+@pytest.fixture(scope="session")
 def conn_factory(
     request,
     driver: model.DriverQuirks,
