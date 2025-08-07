@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import typing
+
 import pyarrow
 import pytest
 
@@ -54,3 +56,68 @@ def test_compare_fields():
         compare.compare_fields(f1, f4)
     with pytest.raises(AssertionError):
         compare.compare_fields(f1, f6)
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param(pyarrow.scalar(None), None, id="null"),
+        pytest.param(
+            pyarrow.scalar(3661, pyarrow.time32("s")),
+            compare.NaiveTime(hour=1, minute=1, second=1, nanosecond=0),
+            id="time32[s]",
+        ),
+        pytest.param(
+            pyarrow.scalar(3661001, pyarrow.time32("ms")),
+            compare.NaiveTime(hour=1, minute=1, second=1, nanosecond=1000000),
+            id="time32[ms]",
+        ),
+        pytest.param(
+            pyarrow.scalar(3661001001, pyarrow.time64("us")),
+            compare.NaiveTime(hour=1, minute=1, second=1, nanosecond=1001000),
+            id="time64[us]",
+        ),
+        pytest.param(
+            pyarrow.scalar(3661001001001, pyarrow.time64("ns")),
+            compare.NaiveTime(hour=1, minute=1, second=1, nanosecond=1001001),
+            id="time64[ns]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("s")),
+            "1970-01-01T00:00:01",
+            id="timestamp[s]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("s", "UTC")),
+            "1970-01-01T00:00:01Z",
+            id="timestamp[s, UTC]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("s", "Asia/Tokyo")),
+            "1970-01-01T09:00:01+09:00[Asia/Tokyo]",
+            id="timestamp[s, Asia/Tokyo]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("s", "+09:00")),
+            "1970-01-01T09:00:01+09:00",
+            id="timestamp[s, +09:00]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("s", "-00:30")),
+            "1969-12-31T23:30:01-00:30",
+            id="timestamp[s, -00:30]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("ns")),
+            "1970-01-01T00:00:00.000000001",
+            id="timestamp[ns]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("ns", "UTC")),
+            "1970-01-01T00:00:00.000000001Z",
+            id="timestamp[ns, UTC]",
+        ),
+    ],
+)
+def test_scalar_to_py_smart(value: pyarrow.Scalar, expected: typing.Any) -> None:
+    assert compare.scalar_to_py_smart(value) == expected
