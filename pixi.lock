@@ -40,6 +40,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/29/16/c8a903f4c4dffe7a12843191437d7cd8e32751d5de349d45d3fe69544e87/pytest-8.4.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/e0/552843e0d356fbb5256d21449fa957fa4eff3bbc135a74a691ee70c7c5da/typing_extensions-4.14.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/c7/61/b5e123dd98e90caeedd8ed3ede06b52ca0e18d8d16dfad8133c954702451/whenever-0.8.8-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: .
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h99b78c6_7.conda
@@ -68,6 +69,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/29/16/c8a903f4c4dffe7a12843191437d7cd8e32751d5de349d45d3fe69544e87/pytest-8.4.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/e0/552843e0d356fbb5256d21449fa957fa4eff3bbc135a74a691ee70c7c5da/typing_extensions-4.14.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6a/95/0837ab424edb8568afecad9cf742bac1b4cd588bab8152ef26249c795c90/whenever-0.8.8-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: .
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -120,13 +122,14 @@ packages:
 - pypi: .
   name: adbc-drivers-validation
   version: '0.1'
-  sha256: 54c5bd2a029a86ad0680b4698ab4aa0e2d9f963f1ab8d9c83579d70369e918e6
+  sha256: 79d4d911edf9b3b45d461153419c83d5f819f0a9ed048d5d70695f9e0cfdf8d5
   requires_dist:
   - adbc-driver-manager>=1.6.0,<2
   - duckdb>=1.3.1,<2
   - jinja2>=3.1.6,<4
   - pyarrow>=20.0.0,<21
   - pytest>=8.4.1,<9
+  - whenever>=0.8.8,<0.9
   requires_python: '>=3.13'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-h4bc722e_7.conda
@@ -609,3 +612,17 @@ packages:
   purls: []
   size: 122968
   timestamp: 1742727099393
+- pypi: https://files.pythonhosted.org/packages/6a/95/0837ab424edb8568afecad9cf742bac1b4cd588bab8152ef26249c795c90/whenever-0.8.8-cp313-cp313-macosx_11_0_arm64.whl
+  name: whenever
+  version: 0.8.8
+  sha256: a3b0e34a7afe367f245bcf3b8a9e581b6c09437d623001acf23207b08709837e
+  requires_dist:
+  - tzdata>=2020.1 ; sys_platform == 'win32'
+  requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/c7/61/b5e123dd98e90caeedd8ed3ede06b52ca0e18d8d16dfad8133c954702451/whenever-0.8.8-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+  name: whenever
+  version: 0.8.8
+  sha256: f1abba00ed463689d2d062eec36e5ea5f0d195d3fe6702121744592d5a234b09
+  requires_dist:
+  - tzdata>=2020.1 ; sys_platform == 'win32'
+  requires_python: '>=3.9'

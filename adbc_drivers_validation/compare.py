@@ -19,6 +19,7 @@ import difflib
 import typing
 
 import pyarrow
+import whenever
 
 T = typing.TypeVar("T", pyarrow.Schema, pyarrow.Table)
 
@@ -67,6 +68,89 @@ def make_nullable(value: T) -> T:
             raise TypeError(f"Unsupported type: {type(value)}")
 
 
+def scalar_to_py_smart(value: pyarrow.Scalar) -> typing.Any:
+    """
+    Convert a PyArrow Scalar to a Python object.
+
+    Unlike `pyarrow.Scalar.as_py()`, this function aims to properly handle
+    times, timestamps, and intervals.
+    """
+
+    if value is None or not value.is_valid:
+        return None
+    elif isinstance(value, (pyarrow.Time32Scalar, pyarrow.Time64Scalar)):
+        # Needed because to_pylist uses the wrong object for times, losing precision...
+        match value.type.unit:
+            case "s":
+                return NaiveTime(
+                    hour=value.value // 3600,
+                    minute=(value.value % 3600) // 60,
+                    second=value.value % 60,
+                    nanosecond=0,
+                )
+            case "ms":
+                return NaiveTime(
+                    hour=value.value // 3600000,
+                    minute=(value.value % 3600000) // 60000,
+                    second=(value.value % 60000) // 1000,
+                    nanosecond=(value.value % 1000) * 1000000,
+                )
+            case "us":
+                return NaiveTime(
+                    hour=value.value // 3600000000,
+                    minute=(value.value % 3600000000) // 60000000,
+                    second=(value.value % 60000000) // 1000000,
+                    nanosecond=(value.value % 1000000) * 1000,
+                )
+            case "ns":
+                return NaiveTime(
+                    hour=value.value // 3600000000000,
+                    minute=(value.value % 3600000000000) // 60000000000,
+                    second=(value.value % 60000000000) // 1000000000,
+                    nanosecond=value.value % 1000000000,
+                )
+            case _:
+                raise NotImplementedError(str(value))
+    elif isinstance(value, pyarrow.TimestampScalar):
+        match value.type.unit:
+            case "s":
+                nanos = value.value * 1_000_000_000
+            case "ms":
+                nanos = value.value * 1_000_000
+            case "us":
+                nanos = value.value * 1000
+            case "ns":
+                nanos = value.value
+
+        instant = whenever.Instant.from_timestamp_nanos(nanos)
+        if value.type.tz is None or value.type.tz == "":
+            # A bit sketch
+            naive = whenever.PlainDateTime.parse_common_iso(
+                instant.format_common_iso()[:-1]
+            )
+            return str(naive)
+        elif value.type.tz == "UTC":
+            return str(instant)
+        elif value.type.tz[0] in ("+", "-"):
+            negative = value.type.tz[0] == "-"
+            hours, _, minutes = value.type.tz[1:].partition(":")
+            tz_offset = whenever.TimeDelta(hours=int(hours), minutes=int(minutes))
+            if negative:
+                tz_offset = -tz_offset
+            offset = instant.to_fixed_offset(tz_offset)
+            return str(offset)
+        zoned = instant.to_tz(value.type.tz)
+        return str(zoned)
+    elif isinstance(value, pyarrow.MonthDayNanoIntervalScalar):
+        mdn = value.as_py()
+        if mdn is None:
+            return None
+        else:
+            return f"{mdn[0]}M{mdn[1]}d{mdn[2]}ns"
+
+    return value.as_py()
+
+
 def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
     """Convert a PyArrow Table to a list of dictionaries."""
     rows = []
@@ -75,51 +159,8 @@ def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
         for col_idx in range(table.num_columns):
             value = table.column(col_idx)[row_idx]
             col_name = table.schema[col_idx].name
-            if value is None:
-                row[col_name] = None
-            elif isinstance(value, (pyarrow.Time32Scalar, pyarrow.Time64Scalar)):
-                # Needed because to_pylist uses the wrong object for times, losing precision...
-                match value.type.unit:
-                    case "s":
-                        row[col_name] = NaiveTime(
-                            hour=value.value // 3600,
-                            minute=(value.value % 3600) // 60,
-                            second=value.value % 60,
-                            nanosecond=0,
-                        )
-                    case "ms":
-                        row[col_name] = NaiveTime(
-                            hour=value.value // 3600000,
-                            minute=(value.value % 3600000) // 60000,
-                            second=(value.value % 60000) // 1000,
-                            nanosecond=(value.value % 1000) * 1000000,
-                        )
-                    case "us":
-                        row[col_name] = NaiveTime(
-                            hour=value.value // 3600000000,
-                            minute=(value.value % 3600000000) // 60000000,
-                            second=(value.value % 60000000) // 1000000,
-                            nanosecond=(value.value % 1000000) * 1000,
-                        )
-                    case "ns":
-                        row[col_name] = NaiveTime(
-                            hour=value.value // 3600000000000,
-                            minute=(value.value % 3600000000000) // 60000000000,
-                            second=(value.value % 60000000000) // 1000000000,
-                            nanosecond=value.value % 1000000000,
-                        )
-                    case _:
-                        raise NotImplementedError(str(value))
-            elif isinstance(value, pyarrow.MonthDayNanoIntervalScalar):
-                mdn = value.as_py()
-                if mdn is None:
-                    row[col_name] = None
-                else:
-                    row[col_name] = f"{mdn[0]}M{mdn[1]}d{mdn[2]}ns"
-            else:
-                row[col_name] = value.as_py()
+            row[col_name] = scalar_to_py_smart(value)
         rows.append(row)
-
     return rows
 
 
