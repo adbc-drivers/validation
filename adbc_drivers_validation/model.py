@@ -196,9 +196,10 @@ class DriverQuirks(abc.ABC):
         if temporary:
             raise NotImplementedError
 
-        name = ".".join(
-            [part for part in (catalog_name, schema_name, table_name) if part]
+        name = self.quote_identifier(
+            *[part for part in (catalog_name, schema_name, table_name) if part]
         )
+
         if if_exists:
             return f"DROP TABLE IF EXISTS {name}"
         else:
@@ -216,6 +217,14 @@ class DriverQuirks(abc.ABC):
         Return the fully escaped name of a temporary table.
         """
         raise NotImplementedError
+
+    def quote_identifier(self, *identifiers: str) -> str:
+        return ".".join(self.quote_one_identifier(ident) for ident in identifiers)
+
+    def quote_one_identifier(self, identifier: str) -> str:
+        """Quote an identifier (e.g. table or column name)."""
+        identifier = identifier.replace('"', '""')
+        return f'"{identifier}"'
 
     @property
     def sample_ddl_constraints(self) -> list[str]:

@@ -89,7 +89,10 @@ def make_table_name(prefix: str, query: Query) -> str:
 
 class TestIngest:
     def test_create(
-        self, conn: adbc_driver_manager.dbapi.Connection, query: Query
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.IngestQuery)
@@ -98,10 +101,12 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             cursor.adbc_ingest(table_name, data, mode="create")
 
-        select = f"SELECT idx, value FROM {table_name} ORDER BY idx ASC"
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             cursor.adbc_statement.set_sql_query(select)
             handle, _ = cursor.adbc_statement.execute_query()
@@ -137,7 +142,9 @@ class TestIngest:
             cursor.adbc_ingest(table_name, data, mode="create")
             cursor.adbc_ingest(table_name, data2, mode="append")
 
-        select = f"SELECT idx, value FROM {table_name} ORDER BY idx ASC"
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             cursor.adbc_statement.set_sql_query(select)
             handle, _ = cursor.adbc_statement.execute_query()
@@ -201,7 +208,9 @@ class TestIngest:
             cursor.adbc_ingest(table_name, data, mode="create_append")
             cursor.adbc_ingest(table_name, data2, mode="create_append")
 
-        select = f"SELECT idx, value FROM {table_name} ORDER BY idx ASC"
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             cursor.adbc_statement.set_sql_query(select)
             handle, _ = cursor.adbc_statement.execute_query()
@@ -235,14 +244,16 @@ class TestIngest:
         data2 = data.slice(0, 1)
 
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             cursor.adbc_ingest(table_name, data, mode="replace")
             if driver.name == "bigquery":
                 # BigQuery rate-limits metadata operations
                 time.sleep(5)
             cursor.adbc_ingest(table_name, data2, mode="replace")
 
-        select = f"SELECT idx, value FROM {table_name} ORDER BY idx ASC"
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             cursor.adbc_statement.set_sql_query(select)
             handle, _ = cursor.adbc_statement.execute_query()
@@ -253,7 +264,10 @@ class TestIngest:
         compare.compare_tables(expected, result, query.metadata())
 
     def test_replace_noop(
-        self, conn: adbc_driver_manager.dbapi.Connection, query: Query
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.IngestQuery)
@@ -262,10 +276,12 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             cursor.adbc_ingest(table_name, data, mode="replace")
 
-        select = f"SELECT idx, value FROM {table_name} ORDER BY idx ASC"
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             cursor.adbc_statement.set_sql_query(select)
             handle, _ = cursor.adbc_statement.execute_query()
@@ -298,7 +314,7 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             cursor.adbc_ingest(table_name, data, mode="create")
 
         objects = (
@@ -369,6 +385,9 @@ class TestIngest:
         )
         table_name = "test_ingest_temporary"
 
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+
         with conn_factory() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(driver.drop_table(table_name=table_name))
@@ -376,8 +395,16 @@ class TestIngest:
                 cursor.adbc_ingest(table_name, data2, temporary=False)
 
             with conn.cursor() as cursor:
-                select_normal = f"SELECT idx, value FROM {driver.features.current_schema}.{table_name} ORDER BY idx ASC"
-                select_temporary = f"SELECT idx, value FROM {driver.qualify_temp_table(cursor, table_name)} ORDER BY idx ASC"
+                normal_table = driver.quote_identifier(
+                    driver.features.current_schema, table_name
+                )
+                temp_table = driver.qualify_temp_table(cursor, table_name)
+                select_normal = (
+                    f"SELECT {idx}, {value} FROM {normal_table} ORDER BY {idx} ASC"
+                )
+                select_temporary = (
+                    f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
+                )
 
                 cursor.adbc_statement.set_sql_query(select_normal)
                 handle, _ = cursor.adbc_statement.execute_query()
@@ -418,7 +445,9 @@ class TestIngest:
                 db_schema_name=schema_name,
             )
 
-        select = f"SELECT idx, value FROM {schema_name}.{table_name} ORDER BY idx ASC"
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             cursor.adbc_statement.set_sql_query(select)
             handle, _ = cursor.adbc_statement.execute_query()
@@ -456,7 +485,9 @@ class TestIngest:
                 catalog_name=catalog_name,
             )
 
-        select = f"SELECT idx, value FROM {catalog_name}.{schema_name}.{table_name} ORDER BY idx ASC"
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             cursor.adbc_statement.set_sql_query(select)
             handle, _ = cursor.adbc_statement.execute_query()
