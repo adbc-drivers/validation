@@ -275,7 +275,7 @@ class TestConnection:
             table_name,
         )
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
 
         objects = conn.adbc_get_objects(depth="tables").read_all().to_pylist()
         tables = [
@@ -387,7 +387,7 @@ class TestConnection:
             table_name,
         )
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
 
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
         columns = [
@@ -560,7 +560,7 @@ class TestConnection:
             schema=schema,
         )
         with conn.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+            cursor.execute(driver.drop_table(table_name=table_name))
             cursor.adbc_ingest(table_name, data)
 
         objects = (
