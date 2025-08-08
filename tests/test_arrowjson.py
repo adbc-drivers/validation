@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import base64
+import decimal
 import io
 
 import pyarrow
@@ -181,6 +182,15 @@ def test_load_table_extra_fields():
             pyarrow.field("binary", pyarrow.binary(), nullable=True),
             pyarrow.array([b"hello", None], type=pyarrow.binary()),
             id="binary",
+        ),
+        pytest.param(
+            [123, "0.012345", None],
+            pyarrow.field("decimal", pyarrow.decimal128(38, 10), nullable=True),
+            pyarrow.array(
+                [decimal.Decimal("123"), decimal.Decimal("0.012345"), None],
+                type=pyarrow.decimal128(38, 10),
+            ),
+            id="decimal128(38, 10)",
         ),
     ],
 )
