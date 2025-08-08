@@ -43,7 +43,9 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             base64.b64decode(value) if value is not None else None for value in values
         ]
     elif pyarrow.types.is_decimal(field.type):
-        return pyarrow.array(values, type=pyarrow.string()).cast(field.type)
+        return pyarrow.array(
+            [str(v) if v is not None else None for v in values], type=pyarrow.string()
+        ).cast(field.type)
     elif field.type.id == 37:
         # month_day_nano
         # format: 0M0d0ns
