@@ -58,6 +58,13 @@ def test_compare_fields():
         compare.compare_fields(f1, f6)
 
 
+def test_compare_schemas_nullability():
+    # Should ignore nullability
+    s1 = pyarrow.schema([pyarrow.field("a", pyarrow.int32(), nullable=True)])
+    s2 = pyarrow.schema([pyarrow.field("a", pyarrow.int32(), nullable=False)])
+    compare.compare_schemas(s1, s2)
+
+
 @pytest.mark.parametrize(
     "value, expected",
     [
