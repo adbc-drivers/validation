@@ -59,7 +59,14 @@ def make_nullable(value: T) -> T:
                         )
                     )
                 else:
-                    fields.append(field)
+                    fields.append(
+                        pyarrow.field(
+                            field.name,
+                            field.type,
+                            nullable=True,
+                            metadata=field.metadata,
+                        )
+                    )
             return pyarrow.schema(fields)
         case pyarrow.Table():
             schema = make_nullable(value.schema)
