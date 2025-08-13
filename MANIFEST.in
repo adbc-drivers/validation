@@ -13,3 +13,4 @@
 # limitations under the License.
 
 recursive-include adbc_drivers_validation/queries/ *.json *.sql *.toml
+recursive-include adbc_drivers_validation/templates/ *.md

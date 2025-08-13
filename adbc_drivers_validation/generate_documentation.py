@@ -229,8 +229,8 @@ def render(drivers: dict[str, DriverTypeTable], output_directory: Path) -> None:
         loader=jinja2.PackageLoader("adbc_drivers_validation"),
         autoescape=jinja2.select_autoescape(),
     )
-    features_template = env.get_template("features.qmd")
-    types_template = env.get_template("types.qmd")
+    features_template = env.get_template("features.md")
+    types_template = env.get_template("types.md")
     for driver in sorted(drivers):
         output = output_directory / f"types/_{driver}.md"
         render_to(output, types_template, dataclasses.asdict(drivers[driver]))
