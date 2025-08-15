@@ -320,15 +320,12 @@ def generate_includes(
             for query_name in test_case["query_names"]
             for field in query_set.queries[query_name].query.bind_schema()
         }
-        if len(arrow_type_names) != 1:
-            raise NotImplementedError(
-                f"Can't handle a driver being inconsistent in its arrow type for a SQL type: {arrow_type_names}"
-            )
         sql_type = html.escape(test_case["sql_type"])
-        arrow_type = html.escape(next(iter(arrow_type_names)))
-        drivers[test_case["driver"]].add_table_entry(
-            "bind", arrow_type, sql_type, test_case
-        )
+        for arrow_type in arrow_type_names:
+            arrow_type = html.escape(arrow_type)
+            drivers[test_case["driver"]].add_table_entry(
+                "bind", arrow_type, sql_type, test_case
+            )
 
     # Ingest type support
     type_tests = (
