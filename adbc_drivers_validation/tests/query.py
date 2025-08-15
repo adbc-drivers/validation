@@ -19,12 +19,22 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import contextlib
+
 import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
+
+
+@contextlib.contextmanager
+def scoped_trace(msg: str) -> None:
+    try:
+        yield
+    except Exception as e:
+        raise ExceptionGroup(msg, [e]) from None
 
 
 def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
@@ -89,8 +99,9 @@ class TestQuery:
             with conn.cursor() as cursor:
                 # Avoid using the regular methods since we don't want to prepare()
                 for statement in driver.split_statement(setup):
-                    cursor.adbc_statement.set_sql_query(statement)
-                    cursor.adbc_statement.execute_update()
+                    with scoped_trace(f"setup statement: {statement}"):
+                        cursor.adbc_statement.set_sql_query(statement)
+                        cursor.adbc_statement.execute_update()
 
         bind = subquery.bind_query(driver)
         if bind:
