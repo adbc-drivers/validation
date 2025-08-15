@@ -128,7 +128,7 @@ class TestConnection:
         assert (
             driver_version.startswith("v")
             or driver_version == "unknown"
-            or driver_version == "unknown-dev"
+            or driver_version == "unknown-dirty"
         )
 
     def test_get_objects_catalog(

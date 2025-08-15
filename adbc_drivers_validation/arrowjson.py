@@ -38,7 +38,7 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             f"Field '{field.name}' is not nullable but contains None values"
         )
 
-    if pyarrow.types.is_binary(field.type):
+    if pyarrow.types.is_binary(field.type) or pyarrow.types.is_large_binary(field.type):
         values = [
             base64.b64decode(value) if value is not None else None for value in values
         ]
