@@ -247,6 +247,39 @@ def compare_schemas(
         compare_fields(expected_field, actual_field, ())
 
 
+def sort_oblivious(table: pyarrow.Table, sort_keys: typing.Any) -> pyarrow.Table:
+    # sort, ignorant of extension types
+    # we have to cast to the storage type and back
+    cols = []
+    fields = []
+    for field, col in zip(table.schema, table.columns):
+        if field.type.id == 31:
+            col = pyarrow.chunked_array(
+                (c.storage for c in col.chunks),
+                type=col.type.storage_type,
+            )
+            field = pyarrow.field(
+                field.name,
+                field.type.storage_type,
+                field.nullable,
+                field.metadata,
+            )
+        fields.append(field)
+        cols.append(col)
+    new_table = pyarrow.Table.from_arrays(cols, schema=pyarrow.schema(fields))
+    new_table = new_table.sort_by(sort_keys)
+
+    cols = []
+    for field, col in zip(table.schema, new_table.columns):
+        if field.type.id == 31:
+            col = pyarrow.chunked_array(
+                (field.type.wrap_array(c) for c in col.chunks),
+                type=field.type,
+            )
+        cols.append(col)
+    return pyarrow.Table.from_arrays(cols, schema=table.schema)
+
+
 def compare_tables(
     expected: pyarrow.Table,
     actual: pyarrow.Table,
@@ -258,8 +291,8 @@ def compare_tables(
     actual = make_nullable(actual)
 
     if sort_keys := meta.get("sort-keys", None):
-        expected = expected.sort_by(sort_keys)
-        actual = actual.sort_by(sort_keys)
+        expected = sort_oblivious(expected, sort_keys)
+        actual = sort_oblivious(actual, sort_keys)
 
     compare_schemas(expected.schema, actual.schema)
     if expected != actual:

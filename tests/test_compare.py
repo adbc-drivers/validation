@@ -128,3 +128,53 @@ def test_compare_schemas_nullability():
 )
 def test_scalar_to_py_smart(value: pyarrow.Scalar, expected: typing.Any) -> None:
     assert compare.scalar_to_py_smart(value) == expected
+
+
+@pytest.mark.parametrize(
+    "table, sort_keys, expected",
+    [
+        pytest.param(
+            pyarrow.Table.from_pylist(
+                [
+                    {"idx": 1, "value": 0},
+                    {"idx": 0, "value": 1},
+                    {"idx": 2, "value": 2},
+                ]
+            ),
+            [("idx", "descending")],
+            pyarrow.Table.from_pylist(
+                [
+                    {"idx": 2, "value": 2},
+                    {"idx": 1, "value": 0},
+                    {"idx": 0, "value": 1},
+                ]
+            ),
+            id="int",
+        ),
+        pytest.param(
+            pyarrow.Table.from_pydict(
+                {
+                    "idx": pyarrow.opaque(pyarrow.int64(), "test", "").wrap_array(
+                        pyarrow.array([1, 0, 2])
+                    ),
+                    "value": pyarrow.array([0, 1, 2]),
+                }
+            ),
+            [("idx", "descending")],
+            pyarrow.Table.from_pydict(
+                {
+                    "idx": pyarrow.opaque(pyarrow.int64(), "test", "").wrap_array(
+                        pyarrow.array([2, 1, 0])
+                    ),
+                    "value": pyarrow.array([2, 0, 1]),
+                }
+            ),
+            id="extension",
+        ),
+    ],
+)
+def test_sort_oblivious(
+    table: pyarrow.Table, sort_keys: list, expected: pyarrow.Table
+) -> None:
+    result = compare.sort_oblivious(table, sort_keys)
+    assert result.equals(expected)
