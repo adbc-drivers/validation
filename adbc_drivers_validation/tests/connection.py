@@ -35,7 +35,7 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
         queries = model.query_set(quirks.queries_path)
         for query in queries.queries.values():
             marks = []
-            if not isinstance(query.query, model.SchemaQuery):
+            if not query.name.startswith("type/select/"):
                 continue
             elif not quirks.features.connection_get_table_schema:
                 marks.append(pytest.mark.skip(reason="not implemented"))
@@ -856,7 +856,6 @@ class TestConnection:
         query: model.Query,
     ) -> None:
         subquery = query.query
-        assert isinstance(subquery, model.SchemaQuery)
 
         setup = subquery.setup_query()
         expected_schema = subquery.expected_schema()
@@ -867,5 +866,14 @@ class TestConnection:
                 cursor.adbc_statement.set_sql_query(statement)
                 cursor.adbc_statement.execute_update()
 
-        schema = conn.adbc_get_table_schema("test_table_schema")
+        # XXX: rather hacky, but extract the table name from the SELECT query
+        # that would normally be executed
+        query = subquery.query().split()
+        for i, word in enumerate(query):
+            if word.upper() == "FROM":
+                table_name = query[i + 1]
+                break
+        schema = conn.adbc_get_table_schema(table_name)
+        # Ignore the first column which is normally used to sort the table
+        schema = pyarrow.schema(list(schema)[1:])
         compare.compare_schemas(expected_schema, schema)
