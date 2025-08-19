@@ -319,23 +319,9 @@ class SelectQuery:
 
 
 @dataclasses.dataclass
-class SchemaQuery:
-    expected_schema_path: Path
-    setup_query_path: Path
-
-    def setup_query(self) -> str | None:
-        if not self.setup_query_path:
-            return None
-        return query(self.setup_query_path)
-
-    def expected_schema(self) -> pyarrow.Schema:
-        return query_schema(self.expected_schema_path)
-
-
-@dataclasses.dataclass
 class Query:
     name: str
-    query: IngestQuery | SchemaQuery | SelectQuery
+    query: IngestQuery | SelectQuery
     metadata_paths: list[Path] | None = None
     pytest_marks: list = dataclasses.field(default_factory=list)
 
@@ -374,11 +360,6 @@ class Query:
                         )
                     if parent.query.expected_path:
                         params["expected_path"] = parent.query.expected_path
-                case SchemaQuery():
-                    params = {
-                        "expected_schema_path": parent.query.expected_schema_path,
-                        "setup_query_path": parent.query.setup_query_path,
-                    }
                 case SelectQuery():
                     params = {
                         "query_path": parent.query.query_path,
@@ -410,8 +391,6 @@ class Query:
             for key in params
         ):
             query = IngestQuery(**params)
-        elif params.keys() == {"expected_schema_path", "setup_query_path"}:
-            query = SchemaQuery(**params)
         elif all(
             key in params
             for key in {
