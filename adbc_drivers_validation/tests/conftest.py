@@ -30,6 +30,10 @@ pytest.register_assert_rewrite("adbc_drivers_validation.tests.query")
 pytest.register_assert_rewrite("adbc_drivers_validation.tests.statement")
 
 
+def pytest_addoption(parser):
+    parser.addoption("--repl", action="store_true", default=False)
+
+
 def pytest_collection_modifyitems(
     session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
 ) -> None:
@@ -62,6 +66,11 @@ def pytest_collection_modifyitems(
                             item.user_properties.append((f"tag:{tag_name}", value))
                     else:
                         item.user_properties.append((f"tag:{tag_name}", tag_value))
+
+    if config.getoption("--repl"):
+        items[:] = [item for item in items if item.name.startswith("test_repl[")]
+    else:
+        items[:] = [item for item in items if not item.name.startswith("test_repl[")]
 
 
 @pytest.fixture(scope="session")

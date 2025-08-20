@@ -881,3 +881,12 @@ class TestConnection:
         # Ignore the first column which is normally used to sort the table
         schema = pyarrow.schema(list(schema)[1:])
         compare.compare_schemas(expected_schema, schema)
+
+    def test_repl(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        import code
+
+        code.interact(local={"conn": conn, "driver": driver})
