@@ -57,6 +57,7 @@ class CustomFeatures:
 class DriverTypeTable:
     """A table of features supported by a driver."""
 
+    version: str
     features: model.DriverFeatures
 
     custom_features: CustomFeatures = dataclasses.field(default_factory=CustomFeatures)
@@ -135,12 +136,17 @@ def render_to(sink: Path, template, kwargs) -> None:
     sink.parent.mkdir(parents=True, exist_ok=True)
     rendered = template.render(**kwargs)
     # Eliminate trailing whitespace from lines
-    rendered = "\n".join(line.rstrip() for line in rendered.split("\n"))
+    lines = [line.rstrip() for line in rendered.splitlines()]
+    # Remove trailing empty lines
+    while lines and not lines[-1]:
+        lines = lines[:-1]
+    rendered = "\n".join(lines)
 
     with sink.open("w") as f:
         f.write(rendered)
         f.write("\n")
     print("Generated", sink)
+    return rendered
 
 
 def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
@@ -224,25 +230,71 @@ def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
     )
 
 
-def render(drivers: dict[str, DriverTypeTable], output_directory: Path) -> None:
+def render(
+    drivers: dict[str, DriverTypeTable],
+    driver_template_path: Path,
+    output_directory: Path,
+) -> None:
     env = jinja2.Environment(
         loader=jinja2.PackageLoader("adbc_drivers_validation"),
         autoescape=jinja2.select_autoescape(),
     )
     features_template = env.get_template("features.md")
     types_template = env.get_template("types.md")
-    for driver in sorted(drivers):
-        output = output_directory / f"types/_{driver}.md"
-        render_to(output, types_template, dataclasses.asdict(drivers[driver]))
+    with driver_template_path.open("r") as source:
+        driver_template = env.from_string(source.read())
 
-        output = output_directory / f"features/_{driver}.md"
-        render_to(output, features_template, dataclasses.asdict(drivers[driver]))
+    for driver in sorted(drivers):
+        template_vars = {**dataclasses.asdict(drivers[driver]), "driver": driver}
+
+        output = output_directory / f"{driver}_types.md"
+        types = render_to(output, types_template, template_vars)
+
+        output = output_directory / f"{driver}_features.md"
+        features = render_to(output, features_template, template_vars)
+
+        output = output_directory / f"{driver}.md"
+        version = drivers[driver].version
+        version_header = f":bdg-primary:`Version {version}`"
+        if (
+            version.startswith("unknown")
+            or version.endswith("-dirty")
+            or "dev" in version
+        ):
+            version_header += (
+                "\n\n:::{warning}\nThis is documentation for a prerelease version.\n:::"
+            )
+
+        render_to(
+            output,
+            driver_template,
+            {
+                **template_vars,
+                "types": types,
+                "features": features,
+                "version_header": version_header,
+            },
+        )
 
 
 def generate_includes(
     quirks: model.DriverQuirks, query_set: model.QuerySet
 ) -> dict[str, DriverTypeTable]:
-    drivers = {quirks.name: DriverTypeTable(features=quirks.features)}
+    drivers = {
+        quirks.name: DriverTypeTable(version="unknown", features=quirks.features)
+    }
+
+    # Version
+    version = duckdb.sql("""
+    FROM testcases
+    SELECT
+      driver,
+      ANY_VALUE(properties->>'driver_version') AS version,
+    WHERE test_name = 'test_metadata'
+    GROUP BY driver
+    """)
+    for driver, version in version.fetchall():
+        drivers[driver].version = version
 
     # Select type support
     type_tests = (
@@ -465,8 +517,13 @@ def generate_includes(
     return drivers
 
 
-def generate(quirks: model.DriverQuirks, test_results: Path, output: Path) -> None:
+def generate(
+    quirks: model.DriverQuirks,
+    test_results: Path,
+    driver_template: Path,
+    output: Path,
+) -> None:
     query_set = model.query_set(quirks.queries_path)
     load_testcases(test_results, query_set)
     drivers = generate_includes(quirks, query_set)
-    render(drivers, output)
+    render(drivers, driver_template, output)
