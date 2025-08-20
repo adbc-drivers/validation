@@ -118,7 +118,10 @@ class TestConnection:
             assert conn.adbc_current_db_schema == driver.features.current_schema
 
     def test_get_info(
-        self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        record_property: typing.Callable[[str, typing.Any], None],
     ) -> None:
         info = conn.adbc_get_info()
         assert info.get("driver_name") == driver.driver_name
@@ -130,6 +133,7 @@ class TestConnection:
             or driver_version == "unknown"
             or driver_version == "unknown-dirty"
         )
+        record_property("driver_version", driver_version)
 
     def test_get_objects_catalog(
         self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks
