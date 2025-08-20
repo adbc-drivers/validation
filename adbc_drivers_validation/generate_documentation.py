@@ -290,7 +290,7 @@ def generate_includes(
     SELECT
       driver,
       ANY_VALUE(properties->>'driver_version') AS version,
-    WHERE test_name = 'test_metadata'
+    WHERE test_name = 'test_get_info'
     GROUP BY driver
     """)
     for driver, version in version.fetchall():
