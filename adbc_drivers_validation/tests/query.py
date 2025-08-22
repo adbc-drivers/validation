@@ -20,6 +20,7 @@ pytest_generate_tests hook, call generate_tests.
 """
 
 import contextlib
+import typing
 
 import adbc_driver_manager.dbapi
 import pyarrow
@@ -60,6 +61,13 @@ def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
                 # There's no need to repeat this test multiple times per type
                 continue
             if not quirks.features.statement_execute_schema:
+                marks.append(pytest.mark.skip(reason="not implemented"))
+        elif metafunc.definition.name == "test_get_table_schema":
+            if not isinstance(query.query, model.SelectQuery):
+                continue
+            elif not query.name.startswith("type/select/"):
+                continue
+            elif not quirks.features.connection_get_table_schema:
                 marks.append(pytest.mark.skip(reason="not implemented"))
         elif metafunc.definition.name == "test_query":
             if not isinstance(query.query, model.SelectQuery):
@@ -116,6 +124,7 @@ class TestQuery:
                 cursor.adbc_statement.execute_update()
 
         with conn.cursor() as cursor:
+            _setup_statement(query, cursor)
             cursor.adbc_statement.set_sql_query(sql)
             handle, _ = cursor.adbc_statement.execute_query()
             with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
@@ -144,6 +153,63 @@ class TestQuery:
                     cursor.adbc_statement.execute_update()
 
         with conn.cursor() as cursor:
+            _setup_statement(query, cursor)
             schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)
+
+    def test_get_table_schema(
+        self,
+        driver: model.DriverQuirks,
+        conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+        query: model.Query,
+    ) -> None:
+        subquery = query.query
+
+        setup = subquery.setup_query()
+        expected_schema = subquery.expected_schema()
+
+        with conn_factory() as conn:
+            _setup_connection(query, conn)
+
+            with conn.cursor() as cursor:
+                # Avoid using the regular methods since we don't want to prepare()
+                for statement in driver.split_statement(setup):
+                    cursor.adbc_statement.set_sql_query(statement)
+                    cursor.adbc_statement.execute_update()
+
+            # XXX: rather hacky, but extract the table name from the SELECT query
+            # that would normally be executed
+            query = subquery.query().split()
+            for i, word in enumerate(query):
+                if word.upper() == "FROM":
+                    table_name = query[i + 1]
+                    break
+            schema = conn.adbc_get_table_schema(table_name)
+            # Ignore the first column which is normally used to sort the table
+            schema = pyarrow.schema(list(schema)[1:])
+            compare.compare_schemas(expected_schema, schema)
+
+
+def _setup_connection(query: Query, conn: adbc_driver_manager.dbapi.Connection) -> None:
+    md = query.metadata()
+    if "connection" not in md:
+        return
+
+    connection_md = md["connection"]
+    if "options" not in connection_md:
+        return
+
+    conn.adbc_connection.set_options(**connection_md["options"])
+
+
+def _setup_statement(query: Query, cursor: adbc_driver_manager.dbapi.Cursor) -> None:
+    md = query.metadata()
+    if "statement" not in md:
+        return
+
+    statement_md = md["statement"]
+    if "options" not in statement_md:
+        return
+
+    cursor.adbc_statement.set_options(**statement_md["options"])
