@@ -236,3 +236,42 @@ def test_array_from_values_struct() -> None:
         type=field.type,
     )
     assert actual == expected
+
+
+def test_parse_type_format_decimal():
+    """Test decimal format parsing with various bitwidths and legacy format."""
+    # Test decimal32 (precision 1-9)
+    decimal32_type = arrowjson.parse_type_format("d:9,2,32")
+    assert decimal32_type == pyarrow.decimal32(9, 2)
+
+    # Test decimal64 with precision 10
+    decimal64_type_10 = arrowjson.parse_type_format("d:10,2,64")
+    assert decimal64_type_10 == pyarrow.decimal64(10, 2)
+
+    # Test decimal64 (precision 1-18)
+    decimal64_type = arrowjson.parse_type_format("d:18,4,64")
+    assert decimal64_type == pyarrow.decimal64(18, 4)
+
+    # Test decimal128 (precision 1-38)
+    decimal128_type = arrowjson.parse_type_format("d:38,10,128")
+    assert decimal128_type == pyarrow.decimal128(38, 10)
+
+    # Test decimal256 (precision 1-76)
+    decimal256_type = arrowjson.parse_type_format("d:76,20,256")
+    assert decimal256_type == pyarrow.decimal256(76, 20)
+
+    # Test legacy format (2 parameters, defaults to decimal128)
+    legacy_type = arrowjson.parse_type_format("d:10,2")
+    assert legacy_type == pyarrow.decimal128(10, 2)
+
+    # Test unsupported bitwidth
+    with pytest.raises(ValueError, match="Unsupported decimal bitwidth: 16"):
+        arrowjson.parse_type_format("d:10,2,16")
+
+    # Test invalid format (non-integer parameter)
+    with pytest.raises(ValueError, match="invalid literal for int"):
+        arrowjson.parse_type_format("d:10,2,extra")
+
+    # Test invalid format (too few parameters)
+    with pytest.raises(ValueError, match="Invalid decimal format: d:10"):
+        arrowjson.parse_type_format("d:10")

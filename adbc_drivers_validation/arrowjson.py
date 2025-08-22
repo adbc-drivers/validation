@@ -297,11 +297,11 @@ def parse_type_format(
 
     # Decimal
     if type_format.startswith("d:"):
-        parts = type_format[2:].split(",")
+        parts = [int(part) for part in type_format[2:].split(",")]
 
         if len(parts) == 3:
             # New Arrow C Data Interface format: d:precision,scale,bitwidth
-            precision, scale, bitwidth = map(int, parts)
+            precision, scale, bitwidth = parts
             if bitwidth == 32:
                 return pyarrow.decimal32(precision, scale)
             elif bitwidth == 64:
@@ -316,7 +316,7 @@ def parse_type_format(
         elif len(parts) == 2:
             # Backward compatibility: d:precision,scale -> decimal128 (legacy behavior.)
             # d:10,2 will still work and will be mapped to decimal128
-            precision, scale = map(int, parts)
+            precision, scale = parts
             return pyarrow.decimal128(precision, scale)
 
         else:
