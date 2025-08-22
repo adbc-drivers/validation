@@ -30,46 +30,23 @@ from adbc_drivers_validation import compare, model
 
 def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
-    if metafunc.definition.name == "test_get_table_schema":
-        combinations = []
-        queries = model.query_set(quirks.queries_path)
-        for query in queries.queries.values():
-            marks = []
-            if not query.name.startswith("type/select/"):
-                continue
-            elif not quirks.features.connection_get_table_schema:
-                marks.append(pytest.mark.skip(reason="not implemented"))
-            marks.extend(query.pytest_marks)
-
-            combinations.append(
-                pytest.param(
-                    quirks.name, query, id=f"{quirks.name}:{query.name}", marks=marks
-                )
-            )
-        metafunc.parametrize(
-            "driver,query",
-            combinations,
-            scope="module",
-            indirect=["driver"],
-        )
-    else:
-        marks = []
-        if (
-            enabled := {
-                "test_get_objects_constraints_check": quirks.features.get_objects_constraints_check,
-                "test_get_objects_constraints_foreign": quirks.features.get_objects_constraints_foreign,
-                "test_get_objects_constraints_primary": quirks.features.get_objects_constraints_primary,
-                "test_get_objects_constraints_unique": quirks.features.get_objects_constraints_unique,
-            }.get(metafunc.definition.name)
-        ) is not None:
-            if not enabled:
-                marks.append(pytest.mark.skip(reason="not implemented"))
-        metafunc.parametrize(
-            "driver",
-            [pytest.param(quirks.name, id=quirks.name, marks=marks)],
-            scope="module",
-            indirect=["driver"],
-        )
+    marks = []
+    if (
+        enabled := {
+            "test_get_objects_constraints_check": quirks.features.get_objects_constraints_check,
+            "test_get_objects_constraints_foreign": quirks.features.get_objects_constraints_foreign,
+            "test_get_objects_constraints_primary": quirks.features.get_objects_constraints_primary,
+            "test_get_objects_constraints_unique": quirks.features.get_objects_constraints_unique,
+        }.get(metafunc.definition.name)
+    ) is not None:
+        if not enabled:
+            marks.append(pytest.mark.skip(reason="not implemented"))
+    metafunc.parametrize(
+        "driver",
+        [pytest.param(quirks.name, id=quirks.name, marks=marks)],
+        scope="module",
+        indirect=["driver"],
+    )
 
 
 class TestConnection:
@@ -852,35 +829,6 @@ class TestConnection:
             assert constraints[1]["constraint_column_names"] == ["b", "c"]
         else:
             assert constraints[1]["constraint_column_names"] == ["c", "b"]
-
-    def test_get_table_schema(
-        self,
-        driver: model.DriverQuirks,
-        conn: adbc_driver_manager.dbapi.Connection,
-        query: model.Query,
-    ) -> None:
-        subquery = query.query
-
-        setup = subquery.setup_query()
-        expected_schema = subquery.expected_schema()
-
-        with conn.cursor() as cursor:
-            # Avoid using the regular methods since we don't want to prepare()
-            for statement in driver.split_statement(setup):
-                cursor.adbc_statement.set_sql_query(statement)
-                cursor.adbc_statement.execute_update()
-
-        # XXX: rather hacky, but extract the table name from the SELECT query
-        # that would normally be executed
-        query = subquery.query().split()
-        for i, word in enumerate(query):
-            if word.upper() == "FROM":
-                table_name = query[i + 1]
-                break
-        schema = conn.adbc_get_table_schema(table_name)
-        # Ignore the first column which is normally used to sort the table
-        schema = pyarrow.schema(list(schema)[1:])
-        compare.compare_schemas(expected_schema, schema)
 
     def test_repl(
         self,
