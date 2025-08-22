@@ -255,7 +255,14 @@ def render(
 
         output = output_directory / f"{driver}.md"
         version = drivers[driver].version
-        version_header = f":bdg-primary:`Version {version}`"
+        ref = f"driver-{driver}-{version}"
+        cross_reference = f"({ref})="
+        if version.startswith("v") and "dev" not in version:
+            # An actual release
+            version_header = f"{{bdg-ref-primary}}`Version {version} <{ref}>` ({{ref}}`permalink to this version <{ref}>`)"
+        else:
+            # A prerelease
+            version_header = f"{{bdg-primary}}`Version {version}`"
         if (
             version.startswith("unknown")
             or version.endswith("-dirty")
@@ -272,6 +279,7 @@ def render(
                 **template_vars,
                 "types": types,
                 "features": features,
+                "cross_reference": cross_reference,
                 "version_header": version_header,
             },
         )
