@@ -300,6 +300,10 @@ def parse_type_format(
         precision, scale = map(int, type_format[2:].split(","))
         return pyarrow.decimal128(precision, scale)
 
+    if type_format.startswith("d64:"):
+        precision, scale = map(int, type_format[4:].split(","))
+        return pyarrow.decimal64(precision, scale)
+
     # Temporal Types
     if type_format.startswith("t"):
         if type_format.startswith("td"):  # Date
