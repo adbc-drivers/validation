@@ -297,8 +297,30 @@ def parse_type_format(
 
     # Decimal
     if type_format.startswith("d:"):
-        precision, scale = map(int, type_format[2:].split(","))
-        return pyarrow.decimal128(precision, scale)
+        parts = [int(part) for part in type_format[2:].split(",")]
+
+        if len(parts) == 3:
+            # New Arrow C Data Interface format: d:precision,scale,bitwidth
+            precision, scale, bitwidth = parts
+            if bitwidth == 32:
+                return pyarrow.decimal32(precision, scale)
+            elif bitwidth == 64:
+                return pyarrow.decimal64(precision, scale)
+            elif bitwidth == 128:
+                return pyarrow.decimal128(precision, scale)
+            elif bitwidth == 256:
+                return pyarrow.decimal256(precision, scale)
+            else:
+                raise ValueError(f"Unsupported decimal bitwidth: {bitwidth}")
+
+        elif len(parts) == 2:
+            # Backward compatibility: d:precision,scale -> decimal128 (legacy behavior.)
+            # d:10,2 will still work and will be mapped to decimal128
+            precision, scale = parts
+            return pyarrow.decimal128(precision, scale)
+
+        else:
+            raise ValueError(f"Invalid decimal format: {type_format}")
 
     # Temporal Types
     if type_format.startswith("t"):
