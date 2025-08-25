@@ -103,6 +103,7 @@ class TestConnection:
         info = conn.adbc_get_info()
         assert info.get("driver_name") == driver.driver_name
         assert info.get("vendor_name") == driver.vendor_name
+        assert info.get("vendor_version", "") == driver.vendor_version
         assert info.get("driver_arrow_version").startswith("v")
         driver_version = info.get("driver_version")
         assert (
