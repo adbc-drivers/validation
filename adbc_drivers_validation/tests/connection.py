@@ -101,10 +101,6 @@ class TestConnection:
         record_property: typing.Callable[[str, typing.Any], None],
     ) -> None:
         info = conn.adbc_get_info()
-        assert info.get("driver_name") == driver.driver_name
-        assert info.get("vendor_name") == driver.vendor_name
-        assert info.get("vendor_version", "") == driver.vendor_version
-        assert info.get("driver_arrow_version").startswith("v")
         driver_version = info.get("driver_version")
         assert (
             driver_version.startswith("v")
@@ -112,6 +108,10 @@ class TestConnection:
             or driver_version == "unknown-dirty"
         )
         record_property("driver_version", driver_version)
+        assert info.get("driver_name") == driver.driver_name
+        assert info.get("vendor_name") == driver.vendor_name
+        assert info.get("vendor_version", "") == driver.vendor_version
+        assert info.get("driver_arrow_version").startswith("v")
 
     def test_get_objects_catalog(
         self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks

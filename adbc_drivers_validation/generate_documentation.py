@@ -24,6 +24,7 @@ import typing
 import xml.etree.ElementTree
 from pathlib import Path
 
+import bidict
 import duckdb
 import jinja2
 import pyarrow
@@ -70,11 +71,17 @@ class DriverTypeTable:
     get_table_schema: bool = False
     ingest: dict[str, bool] = dataclasses.field(default_factory=dict)
 
-    footnotes: dict[str, dict[int, str]] = dataclasses.field(
-        default_factory=lambda: collections.defaultdict(dict)
+    footnotes: dict[str, bidict.bidict[int, str]] = dataclasses.field(
+        default_factory=lambda: collections.defaultdict(bidict.bidict)
     )
 
     def add_footnote(self, scope: str, contents: str) -> str:
+        if scope not in {"types"}:
+            raise ValueError(f"Invalid footnote scope: {scope}")
+
+        if contents in self.footnotes[scope].inverse:
+            counter = self.footnotes[scope].inverse[contents]
+            return f" [^{counter}]"
         counter = len(self.footnotes[scope]) + 1
         self.footnotes[scope][counter] = contents
         return f" [^{counter}]"
@@ -85,6 +92,8 @@ class DriverTypeTable:
         lhs: str,
         rhs: str,
         test_case: dict[str, typing.Any],
+        *,
+        extra_caveats: list[str] | None = None,
     ) -> None:
         caveats = []
         table_entry = rhs
@@ -101,7 +110,9 @@ class DriverTypeTable:
 
         if passed == 0:
             table_entry = "❌"
-        elif partial_support or passed < len(test_case["test_results"]):
+        elif (
+            partial_support or passed < len(test_case["test_results"]) or extra_caveats
+        ):
             table_entry += " ⚠️"
             for query_name, result in zip(
                 test_case["query_names"], test_case["test_results"]
@@ -110,6 +121,8 @@ class DriverTypeTable:
                     continue
                 query_kind = query_name.split("/")[1]
                 caveats.append(f"{query_kind} is not supported for {rhs}")
+
+        caveats.extend(extra_caveats or [])
 
         for caveat in caveats:
             table_entry += self.add_footnote("types", caveat)
@@ -345,14 +358,23 @@ def generate_includes(
                     show_type_parameters=show_type_parameters,
                 )
             )
+        extra_caveats = []
         if len(arrow_type_names) != 1:
-            raise NotImplementedError(
-                f"Driver is inconsistent in SQL to Arrow type: {test_case['sql_type']} => {arrow_type_names}"
+            arrow_type = ", ".join(sorted(arrow_type_names))
+            extra_caveats.append(
+                "Return type is inconsistent depending on how the query was written"
             )
+        else:
+            arrow_type = next(iter(arrow_type_names))
+
+        arrow_type = html.escape(arrow_type)
         sql_type = html.escape(test_case["sql_type"])
-        arrow_type = html.escape(next(iter(arrow_type_names)))
         drivers[test_case["driver"]].add_table_entry(
-            "select", sql_type, arrow_type, test_case
+            "select",
+            sql_type,
+            arrow_type,
+            test_case,
+            extra_caveats=extra_caveats,
         )
 
     # Bind type support
