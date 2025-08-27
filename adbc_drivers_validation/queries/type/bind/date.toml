@@ -14,5 +14,8 @@
 
 sort-keys = [["res", "ascending"]]
 
+[setup]
+drop = "test_date"
+
 [tags]
 sql-type-name = "DATE"

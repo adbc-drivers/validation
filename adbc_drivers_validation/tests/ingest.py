@@ -30,51 +30,56 @@ from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
 
 
-def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
+def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
+    param_string = ""
     combinations = []
 
-    enabled = {
-        "test_not_null": quirks.features.statement_bulk_ingest,
-        "test_temporary": quirks.features.statement_bulk_ingest_temporary,
-        "test_schema": quirks.features.statement_bulk_ingest_schema,
-        "test_catalog": quirks.features.statement_bulk_ingest_catalog,
-    }.get(metafunc.definition.name, None)
-    if enabled is not None:
-        marks = []
-        if not enabled:
-            marks.append(pytest.mark.skip(reason="not implemented"))
+    for quirks in all_quirks:
+        driver_param = f"{quirks.name}:{quirks.short_version}"
+        enabled = {
+            "test_not_null": quirks.features.statement_bulk_ingest,
+            "test_temporary": quirks.features.statement_bulk_ingest_temporary,
+            "test_schema": quirks.features.statement_bulk_ingest_schema,
+            "test_catalog": quirks.features.statement_bulk_ingest_catalog,
+        }.get(metafunc.definition.name, None)
+        if enabled is not None:
+            marks = []
+            if not enabled:
+                marks.append(pytest.mark.skip(reason="not implemented"))
 
-        metafunc.parametrize(
-            "driver",
-            [pytest.param(quirks.name, id=quirks.name, marks=marks)],
-            scope="module",
-            indirect=["driver"],
-        )
-        return
-
-    queries = model.query_set(quirks.queries_path)
-    for query in queries.queries.values():
-        marks = []
-        marks.extend(query.pytest_marks)
-
-        if not isinstance(query.query, model.IngestQuery):
-            continue
-        if not quirks.features.statement_bulk_ingest:
-            marks.append(pytest.mark.skip(reason="not implemented"))
-
-        if metafunc.definition.name != "test_create" and query.name != "ingest/string":
-            # There's no need to test every case on every mode
-            continue
-
-        combinations.append(
-            pytest.param(
-                quirks.name, query, id=f"{quirks.name}:{query.name}", marks=marks
+            param_string = "driver"
+            combinations.append(
+                pytest.param(driver_param, id=driver_param, marks=marks)
             )
-        )
+            continue
+
+        param_string = "driver,query"
+        queries = model.query_set(quirks.queries_paths)
+        for query in queries.queries.values():
+            marks = []
+            marks.extend(query.pytest_marks)
+
+            if not isinstance(query.query, model.IngestQuery):
+                continue
+            if not quirks.features.statement_bulk_ingest:
+                marks.append(pytest.mark.skip(reason="not implemented"))
+
+            if (
+                metafunc.definition.name != "test_create"
+                and query.name != "ingest/string"
+            ):
+                # There's no need to test every case on every mode
+                continue
+
+            combinations.append(
+                pytest.param(
+                    driver_param, query, id=f"{driver_param}:{query.name}", marks=marks
+                )
+            )
 
     metafunc.parametrize(
-        "driver,query",
+        param_string,
         combinations,
         scope="module",
         indirect=["driver"],

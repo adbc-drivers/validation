@@ -147,11 +147,27 @@ class DriverFeatures:
             return self._secondary_catalog_schema.get_or_raise()
         return self._secondary_catalog_schema
 
+    def with_values(self, **kwargs) -> typing.Self:
+        params = {}
+        for key, value in dataclasses.asdict(self).items():
+            if key in {
+                "_current_catalog",
+                "_current_schema",
+                "_secondary_schema",
+                "_secondary_catalog",
+                "_secondary_catalog_schema",
+            }:
+                params[key[1:]] = value
+            else:
+                params[key] = value
+        params.update(kwargs)
+        return DriverFeatures(**params)
+
 
 class DriverQuirks(abc.ABC):
     @property
     @abc.abstractmethod
-    def queries_path(self) -> Path: ...
+    def queries_paths(self) -> tuple[Path]: ...
 
     def bind_parameter(self, index: int) -> str:
         """
@@ -513,5 +529,8 @@ def base_query_set() -> QuerySet:
 
 
 @functools.cache
-def query_set(path: Path) -> QuerySet:
-    return QuerySet.load(path, parent=base_query_set())
+def query_set(paths: tuple[Path]) -> QuerySet:
+    qs: QuerySet | None = None
+    for path in paths:
+        qs = QuerySet.load(path, parent=qs or base_query_set())
+    return qs

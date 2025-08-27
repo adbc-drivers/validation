@@ -14,5 +14,8 @@
 
 sort-keys = [["res", "ascending"]]
 
+[setup]
+drop = "test_string"
+
 [tags]
 sql-type-name = "VARCHAR"

@@ -64,7 +64,3 @@
 {%- endfor -%}
 {{ "" }}
 :::
-
-{% for counter, footnote in footnotes["types"].items() %}
-[^{{ counter }}]: {{ footnote }}
-{% endfor %}

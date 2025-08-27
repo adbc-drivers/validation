@@ -26,38 +26,40 @@ import pytest
 from adbc_drivers_validation import model
 
 
-def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
+def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
     marks = []
     combinations = []
 
-    if (
-        metafunc.definition.name == "test_parameter_execute"
-        and not quirks.features.statement_bind
-    ):
-        marks.append(pytest.mark.skip("bind not supported"))
-
-    if metafunc.definition.name == "test_parameter_schema":
-        if not quirks.features.statement_bind:
+    for quirks in all_quirks:
+        driver_param = f"{quirks.name}:{quirks.short_version}"
+        if (
+            metafunc.definition.name == "test_parameter_execute"
+            and not quirks.features.statement_bind
+        ):
             marks.append(pytest.mark.skip("bind not supported"))
-        elif not quirks.features.statement_get_parameter_schema:
+
+        if metafunc.definition.name == "test_parameter_schema":
+            if not quirks.features.statement_bind:
+                marks.append(pytest.mark.skip("bind not supported"))
+            elif not quirks.features.statement_get_parameter_schema:
+                marks.append(
+                    pytest.mark.xfail(
+                        raises=adbc_driver_manager.dbapi.NotSupportedError, strict=True
+                    )
+                )
+
+        if (
+            metafunc.definition.name == "test_prepare"
+            and not quirks.features.statement_prepare
+        ):
             marks.append(
                 pytest.mark.xfail(
                     raises=adbc_driver_manager.dbapi.NotSupportedError, strict=True
                 )
             )
 
-    if (
-        metafunc.definition.name == "test_prepare"
-        and not quirks.features.statement_prepare
-    ):
-        marks.append(
-            pytest.mark.xfail(
-                raises=adbc_driver_manager.dbapi.NotSupportedError, strict=True
-            )
-        )
-
-    combinations.append(pytest.param(quirks.name, id=quirks.name, marks=marks))
+        combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
 
     metafunc.parametrize(
         "driver",

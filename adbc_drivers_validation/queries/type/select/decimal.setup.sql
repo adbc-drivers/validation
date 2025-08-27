@@ -1,5 +1,3 @@
-DROP TABLE IF EXISTS test_decimal;
-
 CREATE TABLE test_decimal (
     idx INTEGER,
     res NUMERIC(10,2)
