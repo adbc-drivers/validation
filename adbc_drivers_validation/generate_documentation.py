@@ -58,7 +58,7 @@ class CustomFeatures:
 class DriverTypeTable:
     """A table of features supported by a driver."""
 
-    version: str
+    quirks: model.DriverQuirks
     features: model.DriverFeatures
 
     custom_features: CustomFeatures = dataclasses.field(default_factory=CustomFeatures)
@@ -71,9 +71,95 @@ class DriverTypeTable:
     get_table_schema: bool = False
     ingest: dict[str, bool] = dataclasses.field(default_factory=dict)
 
+    def pprint(self) -> str:
+        # Slightly more friendly representation for debugging
+        lines = []
+
+        lines.append("Features")
+        lines.append("~~~~~~~~")
+
+        for field in dataclasses.fields(self.features):
+            if field.name.startswith("_"):
+                continue
+
+            value = getattr(self.features, field.name)
+            if isinstance(value, bool):
+                value = "✅" if value else "❌"
+            lines.append(f"- {field.name}: {value}")
+
+        for group, features in self.custom_features.groups.items():
+            lines.append(f"- {group}:")
+            for feature in features:
+                status = "✅" if feature.supported else "❌"
+                lines.append(f"  - {feature.name}: {status} {feature.description}")
+
+        lines.append("")
+        lines.append("GetObjects")
+        lines.append("~~~~~~~~~~")
+        for name, supported in self.get_objects.items():
+            status = "✅" if supported else "❌"
+            lines.append(f"- {name}: {status}")
+
+        status = "✅" if self.get_table_schema else "❌"
+        lines.append("")
+        lines.append(f"GetTableSchema: {status}")
+
+        lines.append("")
+        lines.append("Ingest Modes")
+        lines.append("~~~~~~~~~~~~")
+        for name, supported in self.ingest.items():
+            status = "✅" if supported else "❌"
+            lines.append(f"- {name}: {status}")
+
+        def render_type_table(category: str, entries: list[tuple[str, str]]) -> None:
+            if not entries:
+                return
+            lines.append("")
+            lines.append(f"{category.capitalize()} Types")
+            lines.append("~" * (len(category) + 6))
+            max_lhs = max(len(lhs) for lhs, _ in entries)
+            for lhs, rhs in entries:
+                lines.append(f"- {lhs.ljust(max_lhs)} → {rhs}")
+
+        render_type_table("select", self.type_select)
+        render_type_table("bind", self.type_bind)
+        render_type_table("ingest", self.type_ingest)
+
+        return "\n".join(lines)
+
+
+@dataclasses.dataclass
+class ValidationReport:
+    driver: str
+    versions: dict[str, DriverTypeTable]
+    driver_version: str = "unknown"
     footnotes: dict[str, bidict.bidict[int, str]] = dataclasses.field(
         default_factory=lambda: collections.defaultdict(bidict.bidict)
     )
+
+    def pprint(self) -> str:
+        # Slightly more friendly representation for debugging
+        lines = []
+
+        lines.append(f"Driver Version: {self.driver_version}")
+        lines.append("")
+
+        lines.append("Versions")
+        lines.append("========")
+
+        for version, table in self.versions.items():
+            lines.append("")
+            lines.append(version)
+            lines.append("-" * len(version))
+            lines.append(table.pprint())
+
+        lines.append("")
+        lines.append("Footnotes")
+        lines.append("=========")
+        for idx, footnote in self.footnotes["types"].items():
+            lines.append(f"[^{idx}]: {footnote}")
+
+        return "\n".join(lines)
 
     def add_footnote(self, scope: str, contents: str) -> str:
         if scope not in {"types"}:
@@ -88,6 +174,7 @@ class DriverTypeTable:
 
     def add_table_entry(
         self,
+        vendor_version: str,
         category: typing.Literal["select", "bind", "ingest"],
         lhs: str,
         rhs: str,
@@ -127,7 +214,9 @@ class DriverTypeTable:
         for caveat in caveats:
             table_entry += self.add_footnote("types", caveat)
 
-        getattr(self, f"type_{category}").append((lhs, table_entry))
+        getattr(self.versions[vendor_version], f"type_{category}").append(
+            (lhs, table_entry)
+        )
 
 
 def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
@@ -146,15 +235,8 @@ def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
 
 
 def render_to(sink: Path, template, kwargs) -> None:
+    rendered = render_part(template, kwargs)
     sink.parent.mkdir(parents=True, exist_ok=True)
-    rendered = template.render(**kwargs)
-    # Eliminate trailing whitespace from lines
-    lines = [line.rstrip() for line in rendered.splitlines()]
-    # Remove trailing empty lines
-    while lines and not lines[-1]:
-        lines = lines[:-1]
-    rendered = "\n".join(lines)
-
     with sink.open("w") as f:
         f.write(rendered)
         f.write("\n")
@@ -162,9 +244,25 @@ def render_to(sink: Path, template, kwargs) -> None:
     return rendered
 
 
-def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
+def render_part(template, kwargs) -> str:
+    rendered = template.render(**kwargs)
+    # Eliminate trailing whitespace from lines
+    lines = [line.rstrip() for line in rendered.splitlines()]
+    # Remove empty lines
+    while lines and not lines[-1]:
+        lines = lines[:-1]
+    while lines and not lines[0]:
+        lines = lines[1:]
+    rendered = "\n".join(lines)
+    return rendered
+
+
+def load_testcases(
+    quirks: model.DriverQuirks, results_path: Path, query_set: model.QuerySet
+) -> None:
     """Load test case data into DuckDB."""
     report = xml.etree.ElementTree.parse(results_path).getroot()
+    driver_name = f"{quirks.name}:{quirks.short_version}"
 
     testcases = []
     for testcase in report.findall(".//testsuite[@name='validation']/testcase"):
@@ -180,6 +278,11 @@ def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
             properties[prop.get("name")] = prop.get("value")
 
         driver = properties["driver"]
+        if driver != driver_name:
+            continue
+        driver = quirks.name
+        version = quirks.short_version
+
         query_name = properties.get("query")
         if query_name is None:
             query = None
@@ -206,6 +309,7 @@ def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
                 "test_name": name,
                 "test_result": test_result,
                 "driver": driver,
+                "vendor_version": version,
                 "query_name": query_name,
                 "tags": json.dumps(tags),
                 "properties": json.dumps(properties),
@@ -218,6 +322,7 @@ def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
             pyarrow.field("test_name", pyarrow.string()),
             pyarrow.field("test_result", pyarrow.string()),
             pyarrow.field("driver", pyarrow.string()),
+            pyarrow.field("vendor_version", pyarrow.string()),
             pyarrow.field("query_name", pyarrow.string()),
             # Actually JSON
             pyarrow.field("tags", pyarrow.string()),
@@ -229,12 +334,23 @@ def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
     )
     duckdb.sql(
         """
-        CREATE TABLE testcases AS
+        CREATE TABLE IF NOT EXISTS testcases (
+              test_module STRING,
+              test_name STRING,
+              test_result STRING,
+              driver STRING,
+              vendor_version STRING,
+              query_name STRING,
+              tags JSON,
+              properties JSON,
+        );
+        INSERT INTO testcases
         SELECT
           test_module,
           test_name,
           test_result,
           driver,
+          vendor_version,
           query_name,
           CAST(tags AS JSON) AS tags,
           CAST(properties AS JSON) AS properties,
@@ -244,7 +360,7 @@ def load_testcases(results_path: Path, query_set: model.QuerySet) -> None:
 
 
 def render(
-    drivers: dict[str, DriverTypeTable],
+    report: ValidationReport,
     driver_template_path: Path,
     output_directory: Path,
 ) -> None:
@@ -252,78 +368,98 @@ def render(
         loader=jinja2.PackageLoader("adbc_drivers_validation"),
         autoescape=jinja2.select_autoescape(),
     )
-    features_template = env.get_template("features.md")
-    types_template = env.get_template("types.md")
     with driver_template_path.open("r") as source:
         driver_template = env.from_string(source.read())
 
-    for driver in sorted(drivers):
-        template_vars = {**dataclasses.asdict(drivers[driver]), "driver": driver}
+    driver = report.driver
+    default_vendor_version = max(report.versions.keys())
+    default_version_info = report.versions[default_vendor_version]
 
-        output = output_directory / f"{driver}_types.md"
-        types = render_to(output, types_template, template_vars)
+    template_vars = {
+        **dataclasses.asdict(report.versions[default_vendor_version]),
+        "driver": report.driver,
+    }
+    types = render_part(env.get_template("types.md"), template_vars)
+    features = render_part(env.get_template("features.md"), template_vars)
+    footnotes = render_part(
+        env.get_template("footnotes.md"),
+        {**template_vars, "footnotes": report.footnotes},
+    )
 
-        output = output_directory / f"{driver}_features.md"
-        features = render_to(output, features_template, template_vars)
+    # Assemble the version header/warnings/etc
+    is_prerelease = (
+        not report.driver_version.startswith("v")
+        or report.driver_version.endswith("-dirty")
+        or "dev" in report.driver_version
+    )
 
-        output = output_directory / f"{driver}.md"
-        version = drivers[driver].version
-        if version.startswith("v") and "dev" not in version:
-            # An actual release
-            ref = f"driver-{driver}-{version}"
-            version_header = f"{{bdg-ref-primary}}`Version {version} <{ref}>` ({{ref}}`permalink to this version <{ref}>`)"
-        else:
-            # A prerelease
-            ref = f"driver-{driver}-prerelease"
-            version_header = f"{{bdg-primary}}`Version {version}`"
-        cross_reference = f"({ref})="
-        if (
-            version.startswith("unknown")
-            or version.endswith("-dirty")
-            or "dev" in version
-        ):
-            version_header += (
-                "\n\n:::{warning}\nThis is documentation for a prerelease version.\n:::"
-            )
+    if is_prerelease:
+        ref = f"driver-{driver}-prerelease"
+        version_header = f"Driver Version {{bdg-primary}}`{report.driver_version}`"
+    else:
+        ref = f"driver-{driver}-{report.driver_version}"
+        version_header = f"Driver Version {{bdg-ref-primary}}`{report.driver_version} <{ref}>` ({{ref}}`permalink to this version <{ref}>`)"
 
-        render_to(
-            output,
-            driver_template,
-            {
-                **template_vars,
-                "types": types,
-                "features": features,
-                "cross_reference": cross_reference,
-                "version_header": version_header,
-            },
+    version_header += f"\n<br/>Tested With {default_version_info.quirks.vendor_name}:"
+    for version in sorted(report.versions):
+        version_header += f" {{bdg-secondary}}`{version}`"
+
+    if is_prerelease:
+        version_header += (
+            "\n\n:::{warning}\nThis is documentation for a prerelease version.\n:::"
         )
+
+    render_to(
+        output_directory / f"{driver}.md",
+        driver_template,
+        {
+            **template_vars,
+            "types": types,
+            "features": features,
+            "footnotes": footnotes,
+            "cross_reference": f"({ref})=",
+            "version_header": version_header,
+            "version": report.driver_version,
+        },
+    )
 
 
 def generate_includes(
-    quirks: model.DriverQuirks, query_set: model.QuerySet
+    all_quirks: list[model.DriverQuirks], query_sets: dict[str, model.QuerySet]
 ) -> dict[str, DriverTypeTable]:
-    drivers = {
-        quirks.name: DriverTypeTable(version="unknown", features=quirks.features)
-    }
+    # Handle different versions of one driver
+    report = ValidationReport(
+        driver=all_quirks[0].name,
+        versions={
+            quirks.short_version: DriverTypeTable(
+                quirks=quirks, features=quirks.features
+            )
+            for quirks in all_quirks
+        },
+    )
 
     # Version
-    version = duckdb.sql("""
+    version = (
+        duckdb.sql("""
     FROM testcases
     SELECT
-      driver,
-      ANY_VALUE(properties->>'driver_version') AS version,
+      properties->>'driver_version' AS version,
     WHERE test_name = 'test_get_info'
-    GROUP BY driver
     """)
-    for driver, version in version.fetchall():
-        drivers[driver].version = version
+        .arrow()
+        .to_pylist()
+    )
+    version = list(set(v["version"] for v in version))
+    if len(version) != 1:
+        raise ValueError(f"Expected one driver version, got {version}")
+    report.driver_version = version[0]
 
     # Select type support
     type_tests = (
         duckdb.sql("""
         FROM testcases
         SELECT
-          driver,
+          vendor_version,
           tags->>'sql-type-name' AS sql_type,
           ARRAY_AGG(test_result ORDER BY query_name ASC) AS test_results,
           ARRAY_AGG(query_name ORDER BY query_name ASC) AS query_names,
@@ -332,8 +468,8 @@ def generate_includes(
           test_name = 'test_query'
           AND query_name NOT LIKE 'type/bind/%'
           AND (tags->>'sql-type-name') IS NOT NULL
-        GROUP BY driver, tags->>'sql-type-name'
-        ORDER BY driver, tags->>'sql-type-name'
+        GROUP BY vendor_version, tags->>'sql-type-name'
+        ORDER BY vendor_version, tags->>'sql-type-name'
         """)
         .arrow()
         .to_pylist()
@@ -341,7 +477,7 @@ def generate_includes(
     for test_case in type_tests:
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
-            query = query_set.queries[query_name]
+            query = query_sets[test_case["vendor_version"]].queries[query_name]
             show_type_parameters = (
                 query.metadata()
                 .get("tags", {})
@@ -369,7 +505,8 @@ def generate_includes(
 
         arrow_type = html.escape(arrow_type)
         sql_type = html.escape(test_case["sql_type"])
-        drivers[test_case["driver"]].add_table_entry(
+        report.add_table_entry(
+            test_case["vendor_version"],
             "select",
             sql_type,
             arrow_type,
@@ -382,7 +519,7 @@ def generate_includes(
         duckdb.sql("""
         FROM testcases
         SELECT
-          driver,
+          vendor_version,
           tags->>'sql-type-name' AS sql_type,
           ARRAY_AGG(test_result ORDER BY query_name ASC) AS test_results,
           ARRAY_AGG(query_name ORDER BY query_name ASC) AS query_names,
@@ -391,13 +528,14 @@ def generate_includes(
           test_name = 'test_query'
           AND query_name LIKE 'type/bind/%'
           AND (tags->>'sql-type-name') IS NOT NULL
-        GROUP BY driver, tags->>'sql-type-name'
-        ORDER BY driver, tags->>'sql-type-name'
+        GROUP BY vendor_version, tags->>'sql-type-name'
+        ORDER BY vendor_version, tags->>'sql-type-name'
         """)
         .arrow()
         .to_pylist()
     )
     for test_case in type_tests:
+        query_set = query_sets[test_case["vendor_version"]]
         arrow_type_names = {
             arrow_type_name(field.type)
             for query_name in test_case["query_names"]
@@ -406,8 +544,12 @@ def generate_includes(
         sql_type = html.escape(test_case["sql_type"])
         for arrow_type in arrow_type_names:
             arrow_type = html.escape(arrow_type)
-            drivers[test_case["driver"]].add_table_entry(
-                "bind", arrow_type, sql_type, test_case
+            report.add_table_entry(
+                test_case["vendor_version"],
+                "bind",
+                arrow_type,
+                sql_type,
+                test_case,
             )
 
     # Ingest type support
@@ -415,7 +557,7 @@ def generate_includes(
         duckdb.sql("""
         FROM testcases
         SELECT
-          driver,
+          vendor_version,
           tags->>'sql-type-name' AS sql_type,
           test_result,
           query_name,
@@ -425,19 +567,21 @@ def generate_includes(
           AND test_name = 'test_create'
           AND (tags->>'sql-type-name') IS NOT NULL
           AND test_result != 'skipped'
-        ORDER BY driver, query_name
+        ORDER BY vendor_version, query_name
         """)
         .arrow()
         .to_pylist()
     )
     for test_case in type_tests:
+        query_set = query_sets[test_case["vendor_version"]]
         arrow_type = html.escape(
             arrow_type_name(
                 query_set.queries[test_case["query_name"]].query.input_schema()[1].type
             )
         )
         sql_type = html.escape(test_case["sql_type"])
-        drivers[test_case["driver"]].add_table_entry(
+        report.add_table_entry(
+            test_case["vendor_version"],
             "ingest",
             arrow_type,
             sql_type,
@@ -454,36 +598,36 @@ def generate_includes(
     WITH get_objects_cases AS (
       FROM testcases
       SELECT
-        driver,
+        vendor_version,
         regexp_extract(test_name, 'test_get_objects_([a-z]+)', 1) AS test_name,
         test_result,
       WHERE test_name LIKE 'test_get_objects_%'
     )
     FROM get_objects_cases
-    SELECT driver, test_name, BOOL_AND(test_result = 'passed') AS supported
-    GROUP BY driver, test_name
+    SELECT vendor_version, test_name, BOOL_AND(test_result = 'passed') AS supported
+    GROUP BY vendor_version, test_name
     """)
         .arrow()
         .to_pylist()
     )
     for test_case in get_objects:
-        drivers[test_case["driver"]].get_objects[test_case["test_name"]] = test_case[
-            "supported"
-        ]
+        report.versions[test_case["vendor_version"]].get_objects[
+            test_case["test_name"]
+        ] = test_case["supported"]
 
     # Get table schema
     get_table_schema = (
         duckdb.sql("""
     FROM testcases
-    SELECT driver, CAST(COUNTIF(test_result = 'passed') AS BIGINT) AS supported_cases, COUNT() AS total_cases
+    SELECT vendor_version, CAST(COUNTIF(test_result = 'passed') AS BIGINT) AS supported_cases, COUNT() AS total_cases
     WHERE test_name = 'test_get_table_schema' AND test_result != 'skipped'
-    GROUP BY driver, test_name
+    GROUP BY vendor_version, test_name
     """)
         .arrow()
         .to_pylist()
     )
     for test_case in get_table_schema:
-        drivers[test_case["driver"]].get_table_schema = (
+        report.versions[test_case["vendor_version"]].get_table_schema = (
             test_case["supported_cases"] == test_case["total_cases"]
         )
 
@@ -493,20 +637,20 @@ def generate_includes(
     WITH ingest_cases AS (
       FROM testcases
       SELECT
-        driver,
+        vendor_version,
         test_name,
         test_result,
       WHERE test_module LIKE '%TestIngest'
     )
     FROM ingest_cases
-    SELECT driver, test_name, BOOL_OR(test_result = 'passed') AS supported
-    GROUP BY driver, test_name
+    SELECT vendor_version, test_name, BOOL_OR(test_result = 'passed') AS supported
+    GROUP BY vendor_version, test_name
     """)
         .arrow()
         .to_pylist()
     )
     for test_case in ingest_types:
-        ingest = drivers[test_case["driver"]].ingest
+        ingest = report.versions[test_case["vendor_version"]].ingest
         name = test_case["test_name"][5:]  # Strip 'test_' prefix
         ingest[name] = test_case["supported"]
 
@@ -515,7 +659,7 @@ def generate_includes(
         duckdb.sql("""
         FROM testcases
         SELECT
-          driver,
+          vendor_version,
           properties->>'feature:group' AS feature_group,
           properties->>'feature:name' AS feature_name,
           ANY_VALUE(properties->>'doc') AS description,
@@ -524,11 +668,11 @@ def generate_includes(
           (properties->>'feature:group' IS NOT NULL) AND
           (properties->>'feature:name' IS NOT NULL)
         GROUP BY
-          driver,
+          vendor_version,
           properties->>'feature:group',
           properties->>'feature:name'
         ORDER BY
-          driver,
+          vendor_version,
           properties->>'feature:group',
           properties->>'feature:name'
         """)
@@ -536,7 +680,7 @@ def generate_includes(
         .to_pylist()
     )
     for test_case in custom_features:
-        custom_features = drivers[test_case["driver"]].custom_features
+        custom_features = report.versions[test_case["vendor_version"]].custom_features
         custom_features.groups[test_case["feature_group"]].append(
             CustomFeature(
                 name=test_case["feature_name"],
@@ -545,16 +689,25 @@ def generate_includes(
             )
         )
 
-    return drivers
+    return report
 
 
 def generate(
-    quirks: model.DriverQuirks,
+    all_quirks: list[model.DriverQuirks],
     test_results: Path,
     driver_template: Path,
     output: Path,
 ) -> None:
-    query_set = model.query_set(quirks.queries_path)
-    load_testcases(test_results, query_set)
-    drivers = generate_includes(quirks, query_set)
-    render(drivers, driver_template, output)
+    if len({quirks.name for quirks in all_quirks}) != 1:
+        raise ValueError("All quirks must be for the same driver")
+    if len({quirks.short_version for quirks in all_quirks}) != len(all_quirks):
+        raise ValueError("All quirks must be for the different versions")
+
+    query_sets = {}
+    for quirks in all_quirks:
+        query_set = model.query_set(quirks.queries_paths)
+        load_testcases(quirks, test_results, query_set)
+        query_sets[quirks.short_version] = query_set
+    report = generate_includes(all_quirks, query_sets)
+    print(report.pprint())
+    render(report, driver_template, output)

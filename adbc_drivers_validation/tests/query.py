@@ -38,46 +38,48 @@ def scoped_trace(msg: str) -> None:
         raise ExceptionGroup(msg, [e]) from None
 
 
-def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
+def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
     combinations = []
 
-    queries = model.query_set(quirks.queries_path)
-    for query in queries.queries.values():
-        marks = []
-        marks.extend(query.pytest_marks)
+    for quirks in all_quirks:
+        driver_param = f"{quirks.name}:{quirks.short_version}"
+        queries = model.query_set(quirks.queries_paths)
+        for query in queries.queries.values():
+            marks = []
+            marks.extend(query.pytest_marks)
 
-        if (
-            not quirks.features.statement_bind
-            and isinstance(query.query, model.SelectQuery)
-            and query.query.bind_query(quirks) is not None
-        ):
-            marks.append(pytest.mark.skip(reason="bind not supported"))
+            if (
+                not quirks.features.statement_bind
+                and isinstance(query.query, model.SelectQuery)
+                and query.query.bind_query(quirks) is not None
+            ):
+                marks.append(pytest.mark.skip(reason="bind not supported"))
 
-        if metafunc.definition.name == "test_execute_schema":
-            if not isinstance(query.query, model.SelectQuery):
-                continue
-            if not query.name.startswith("type/select/"):
-                # There's no need to repeat this test multiple times per type
-                continue
-            if not quirks.features.statement_execute_schema:
-                marks.append(pytest.mark.skip(reason="not implemented"))
-        elif metafunc.definition.name == "test_get_table_schema":
-            if not isinstance(query.query, model.SelectQuery):
-                continue
-            elif not query.name.startswith("type/select/"):
-                continue
-            elif not quirks.features.connection_get_table_schema:
-                marks.append(pytest.mark.skip(reason="not implemented"))
-        elif metafunc.definition.name == "test_query":
-            if not isinstance(query.query, model.SelectQuery):
-                continue
+            if metafunc.definition.name == "test_execute_schema":
+                if not isinstance(query.query, model.SelectQuery):
+                    continue
+                if not query.name.startswith("type/select/"):
+                    # There's no need to repeat this test multiple times per type
+                    continue
+                if not quirks.features.statement_execute_schema:
+                    marks.append(pytest.mark.skip(reason="not implemented"))
+            elif metafunc.definition.name == "test_get_table_schema":
+                if not isinstance(query.query, model.SelectQuery):
+                    continue
+                elif not query.name.startswith("type/select/"):
+                    continue
+                elif not quirks.features.connection_get_table_schema:
+                    marks.append(pytest.mark.skip(reason="not implemented"))
+            elif metafunc.definition.name == "test_query":
+                if not isinstance(query.query, model.SelectQuery):
+                    continue
 
-        combinations.append(
-            pytest.param(
-                quirks.name, query, id=f"{quirks.name}:{query.name}", marks=marks
+            combinations.append(
+                pytest.param(
+                    driver_param, query, id=f"{driver_param}:{query.name}", marks=marks
+                )
             )
-        )
 
     metafunc.parametrize(
         "driver,query",
@@ -99,17 +101,10 @@ class TestQuery:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
 
-        setup = subquery.setup_query()
         sql = subquery.query()
         expected_result = subquery.expected_result()
 
-        if setup:
-            with conn.cursor() as cursor:
-                # Avoid using the regular methods since we don't want to prepare()
-                for statement in driver.split_statement(setup):
-                    with scoped_trace(f"setup statement: {statement}"):
-                        cursor.adbc_statement.set_sql_query(statement)
-                        cursor.adbc_statement.execute_update()
+        _setup_query(driver, conn, query)
 
         bind = subquery.bind_query(driver)
         if bind:
@@ -141,16 +136,10 @@ class TestQuery:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
 
-        setup = subquery.setup_query()
         sql = subquery.query()
         expected_schema = subquery.expected_schema()
 
-        if setup:
-            with conn.cursor() as cursor:
-                # Avoid using the regular methods since we don't want to prepare()
-                for statement in driver.split_statement(setup):
-                    cursor.adbc_statement.set_sql_query(statement)
-                    cursor.adbc_statement.execute_update()
+        _setup_query(driver, conn, query)
 
         with conn.cursor() as cursor:
             _setup_statement(query, cursor)
@@ -166,25 +155,27 @@ class TestQuery:
     ) -> None:
         subquery = query.query
 
-        setup = subquery.setup_query()
         expected_schema = subquery.expected_schema()
 
         with conn_factory() as conn:
             _setup_connection(query, conn)
+            _setup_query(driver, conn, query)
 
-            with conn.cursor() as cursor:
-                # Avoid using the regular methods since we don't want to prepare()
-                for statement in driver.split_statement(setup):
-                    cursor.adbc_statement.set_sql_query(statement)
-                    cursor.adbc_statement.execute_update()
+            table_name = None
+            md = query.metadata()
+            if "setup" in md and "drop" in md["setup"]:
+                table_name = md["setup"]["drop"]
+            else:
+                # XXX: rather hacky, but extract the table name from the SELECT query
+                # that would normally be executed
+                query = subquery.query().split()
+                for i, word in enumerate(query):
+                    if word.upper() == "FROM":
+                        table_name = query[i + 1]
+                        break
 
-            # XXX: rather hacky, but extract the table name from the SELECT query
-            # that would normally be executed
-            query = subquery.query().split()
-            for i, word in enumerate(query):
-                if word.upper() == "FROM":
-                    table_name = query[i + 1]
-                    break
+            assert table_name, "Could not determine table name"
+
             schema = conn.adbc_get_table_schema(table_name)
             # Ignore the first column which is normally used to sort the table
             schema = pyarrow.schema(list(schema)[1:])
@@ -201,6 +192,32 @@ def _setup_connection(query: Query, conn: adbc_driver_manager.dbapi.Connection) 
         return
 
     conn.adbc_connection.set_options(**connection_md["options"])
+
+
+def _setup_query(
+    driver: model.DriverQuirks,
+    conn: adbc_driver_manager.dbapi.Connection,
+    query: Query,
+) -> None:
+    subquery = query.query
+    setup = subquery.setup_query()
+
+    if setup:
+        md = query.metadata()
+        with conn.cursor() as cursor:
+            # Avoid using the regular methods since we don't want to prepare()
+            statements = []
+
+            if "setup" in md:
+                setup_md = md["setup"]
+                if "drop" in setup_md:
+                    statements.append(driver.drop_table(table_name=setup_md["drop"]))
+
+            statements.extend(driver.split_statement(setup))
+            for statement in statements:
+                with scoped_trace(f"setup statement: {statement}"):
+                    cursor.adbc_statement.set_sql_query(statement)
+                    cursor.adbc_statement.execute_update()
 
 
 def _setup_statement(query: Query, cursor: adbc_driver_manager.dbapi.Cursor) -> None:

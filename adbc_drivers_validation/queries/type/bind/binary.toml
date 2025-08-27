@@ -14,5 +14,8 @@
 
 sort-keys = [["res", "ascending"]]
 
+[setup]
+drop = "test_binary"
+
 [tags]
 sql-type-name = "VARBINARY"

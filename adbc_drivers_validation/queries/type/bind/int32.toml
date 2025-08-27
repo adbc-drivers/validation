@@ -14,5 +14,8 @@
 
 sort-keys = [["res", "ascending"]]
 
+[setup]
+drop = "test_int32"
+
 [tags]
 sql-type-name = "INT"

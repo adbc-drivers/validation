@@ -14,5 +14,8 @@
 
 sort-keys = [["res", "ascending"]]
 
+[setup]
+drop = "test_int64"
+
 [tags]
 sql-type-name = "BIGINT"

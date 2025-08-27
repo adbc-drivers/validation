@@ -14,5 +14,8 @@
 
 sort-keys = [["res", "ascending"]]
 
+[setup]
+drop = "test_float32"
+
 [tags]
 sql-type-name = "REAL"

@@ -28,22 +28,26 @@ import pytest
 from adbc_drivers_validation import compare, model
 
 
-def generate_tests(quirks: model.DriverQuirks, metafunc) -> None:
+def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
-    marks = []
-    if (
-        enabled := {
-            "test_get_objects_constraints_check": quirks.features.get_objects_constraints_check,
-            "test_get_objects_constraints_foreign": quirks.features.get_objects_constraints_foreign,
-            "test_get_objects_constraints_primary": quirks.features.get_objects_constraints_primary,
-            "test_get_objects_constraints_unique": quirks.features.get_objects_constraints_unique,
-        }.get(metafunc.definition.name)
-    ) is not None:
-        if not enabled:
-            marks.append(pytest.mark.skip(reason="not implemented"))
+    combinations = []
+    for quirks in all_quirks:
+        driver_param = f"{quirks.name}:{quirks.short_version}"
+        marks = []
+        if (
+            enabled := {
+                "test_get_objects_constraints_check": quirks.features.get_objects_constraints_check,
+                "test_get_objects_constraints_foreign": quirks.features.get_objects_constraints_foreign,
+                "test_get_objects_constraints_primary": quirks.features.get_objects_constraints_primary,
+                "test_get_objects_constraints_unique": quirks.features.get_objects_constraints_unique,
+            }.get(metafunc.definition.name)
+        ) is not None:
+            if not enabled:
+                marks.append(pytest.mark.skip(reason="not implemented"))
+        combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
     metafunc.parametrize(
         "driver",
-        [pytest.param(quirks.name, id=quirks.name, marks=marks)],
+        combinations,
         scope="module",
         indirect=["driver"],
     )
@@ -110,8 +114,11 @@ class TestConnection:
         record_property("driver_version", driver_version)
         assert info.get("driver_name") == driver.driver_name
         assert info.get("vendor_name") == driver.vendor_name
-        assert info.get("vendor_version", "") == driver.vendor_version
+        vendor_version = info.get("vendor_version", "")
+        assert vendor_version == driver.vendor_version
         assert info.get("driver_arrow_version").startswith("v")
+        record_property("vendor_version", vendor_version)
+        record_property("short_version", driver.short_version)
 
     def test_get_objects_catalog(
         self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks

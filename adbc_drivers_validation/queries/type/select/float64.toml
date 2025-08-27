@@ -12,5 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+[setup]
+drop = "test_float64"
+
 [tags]
 sql-type-name = "DOUBLE PRECISION"

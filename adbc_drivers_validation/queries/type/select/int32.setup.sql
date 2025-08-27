@@ -1,5 +1,3 @@
-DROP TABLE IF EXISTS test_int32;
-
 CREATE TABLE test_int32 (
     idx INTEGER,
     res INTEGER

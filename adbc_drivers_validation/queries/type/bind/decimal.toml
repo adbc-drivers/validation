@@ -14,5 +14,8 @@
 
 sort-keys = [["res", "ascending"]]
 
+[setup]
+drop = "test_decimal"
+
 [tags]
 sql-type-name = "NUMERIC"

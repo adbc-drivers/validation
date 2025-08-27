@@ -1,5 +1,3 @@
-DROP TABLE IF EXISTS test_timestamptz;
-
 CREATE TABLE test_timestamptz (
     idx INTEGER,
     res TIMESTAMP WITH TIME ZONE
