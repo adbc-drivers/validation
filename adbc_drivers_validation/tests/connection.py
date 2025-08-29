@@ -26,6 +26,7 @@ import pyarrow
 import pytest
 
 from adbc_drivers_validation import compare, model
+from adbc_drivers_validation.utils import scoped_trace
 
 
 def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
@@ -629,10 +630,13 @@ class TestConnection:
         )
         with conn.cursor() as cursor:
             for table in table_names:
-                cursor.execute(driver.drop_table(table_name=table))
+                stmt = driver.drop_table(table_name=table)
+                with scoped_trace(stmt):
+                    cursor.execute(stmt)
 
             for stmt in driver.sample_ddl_constraints:
-                cursor.execute(stmt)
+                with scoped_trace(stmt):
+                    cursor.execute(stmt)
 
     def get_constraints(
         self,
@@ -678,7 +682,7 @@ class TestConnection:
             constraints[0],
             {
                 "constraint_type": "CHECK",
-                "constraint_column_names": [],
+                "constraint_column_names": ["a"],
                 "constraint_column_usage": None,
             },
         )
@@ -686,7 +690,7 @@ class TestConnection:
             constraints[1],
             {
                 "constraint_type": "CHECK",
-                "constraint_column_names": ["a"],
+                "constraint_column_names": ["a", "b"],
                 "constraint_column_usage": None,
             },
         )

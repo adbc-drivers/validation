@@ -19,7 +19,6 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
-import contextlib
 import typing
 
 import adbc_driver_manager.dbapi
@@ -28,14 +27,7 @@ import pytest
 
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
-
-
-@contextlib.contextmanager
-def scoped_trace(msg: str) -> None:
-    try:
-        yield
-    except Exception as e:
-        raise ExceptionGroup(msg, [e]) from None
+from adbc_drivers_validation.utils import scoped_trace
 
 
 def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
