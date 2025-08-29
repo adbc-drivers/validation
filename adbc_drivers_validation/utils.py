@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import typing
 
 
@@ -26,3 +27,11 @@ def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> 
             target[key] = value[:]
         else:
             target[key] = value
+
+
+@contextlib.contextmanager
+def scoped_trace(msg: str) -> None:
+    try:
+        yield
+    except Exception as e:
+        raise ExceptionGroup(msg, [e]) from None
