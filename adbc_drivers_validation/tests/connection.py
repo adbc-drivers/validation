@@ -682,17 +682,27 @@ class TestConnection:
             constraints[0],
             {
                 "constraint_type": "CHECK",
-                "constraint_column_names": ["a"],
                 "constraint_column_usage": None,
             },
+        )
+        assert (
+            constraints[0]["constraint_column_names"] == ["a"]
+            or constraints[0]["constraint_column_names"] == []
         )
         compare.match_fields(
             constraints[1],
             {
                 "constraint_type": "CHECK",
-                "constraint_column_names": ["a", "b"],
                 "constraint_column_usage": None,
             },
+        )
+        # Allow any subset of columns (MSSQL in particular seems to be odd
+        # about this)
+        assert (
+            constraints[1]["constraint_column_names"] == ["a", "b"]
+            or constraints[1]["constraint_column_names"] == ["a"]
+            or constraints[1]["constraint_column_names"] == ["b"]
+            or constraints[1]["constraint_column_names"] == []
         )
 
     def test_get_objects_constraints_foreign(
