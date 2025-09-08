@@ -51,6 +51,20 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
         return pyarrow.array(
             [str(v) if v is not None else None for v in values], type=pyarrow.string()
         ).cast(field.type)
+    elif pyarrow.types.is_float32(field.type) or pyarrow.types.is_float64(field.type):
+        v = []
+        for value in values:
+            if value is None or isinstance(value, (int, float)):
+                v.append(value)
+            elif value in ("Inf", "Infinity", "inf"):
+                v.append(float("inf"))
+            elif value in ("-Inf", "-Infinity", "-inf"):
+                v.append(float("-inf"))
+            elif value in ("NaN", "nan"):
+                v.append(float("nan"))
+            else:
+                raise ValueError(f"Invalid float value: {value}")
+        values = v
     elif field.type.id == 37:
         # month_day_nano
         # format: 0M0d0ns
