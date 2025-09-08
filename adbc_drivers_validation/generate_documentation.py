@@ -212,7 +212,9 @@ class ValidationReport:
         caveats.extend(extra_caveats or [])
 
         for caveat in caveats:
-            table_entry += self.add_footnote("types", caveat)
+            fn = self.add_footnote("types", caveat)
+            if fn not in table_entry:
+                table_entry += fn
 
         getattr(self.versions[vendor_version], f"type_{category}").append(
             (lhs, table_entry)
