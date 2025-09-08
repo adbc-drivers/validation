@@ -19,6 +19,7 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import contextlib
 import typing
 
 import adbc_driver_manager.dbapi
@@ -111,11 +112,11 @@ class TestQuery:
                 cursor.adbc_statement.execute_update()
 
         with conn.cursor() as cursor:
-            _setup_statement(query, cursor)
-            cursor.adbc_statement.set_sql_query(sql)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            with _setup_statement(query, cursor):
+                cursor.adbc_statement.set_sql_query(sql)
+                handle, _ = cursor.adbc_statement.execute_query()
+                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                    result = reader.read_all()
 
         compare.compare_tables(expected_result, result, query.metadata())
 
@@ -134,8 +135,8 @@ class TestQuery:
         _setup_query(driver, conn, query)
 
         with conn.cursor() as cursor:
-            _setup_statement(query, cursor)
-            schema = cursor.adbc_execute_schema(sql)
+            with _setup_statement(query, cursor):
+                schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)
 
@@ -150,40 +151,56 @@ class TestQuery:
         expected_schema = subquery.expected_schema()
 
         with conn_factory() as conn:
-            _setup_connection(query, conn)
-            _setup_query(driver, conn, query)
+            with _setup_connection(query, conn):
+                _setup_query(driver, conn, query)
 
-            table_name = None
-            md = query.metadata()
-            if "setup" in md and "drop" in md["setup"]:
-                table_name = md["setup"]["drop"]
-            else:
-                # XXX: rather hacky, but extract the table name from the SELECT query
-                # that would normally be executed
-                query = subquery.query().split()
-                for i, word in enumerate(query):
-                    if word.upper() == "FROM":
-                        table_name = query[i + 1]
-                        break
+                table_name = None
+                md = query.metadata()
+                if "setup" in md and "drop" in md["setup"]:
+                    table_name = md["setup"]["drop"]
+                else:
+                    # XXX: rather hacky, but extract the table name from the SELECT query
+                    # that would normally be executed
+                    query = subquery.query().split()
+                    for i, word in enumerate(query):
+                        if word.upper() == "FROM":
+                            table_name = query[i + 1]
+                            break
 
-            assert table_name, "Could not determine table name"
+                assert table_name, "Could not determine table name"
 
-            schema = conn.adbc_get_table_schema(table_name)
-            # Ignore the first column which is normally used to sort the table
-            schema = pyarrow.schema(list(schema)[1:])
-            compare.compare_schemas(expected_schema, schema)
+                schema = conn.adbc_get_table_schema(table_name)
+                # Ignore the first column which is normally used to sort the table
+                schema = pyarrow.schema(list(schema)[1:])
+                compare.compare_schemas(expected_schema, schema)
 
 
+@contextlib.contextmanager
 def _setup_connection(query: Query, conn: adbc_driver_manager.dbapi.Connection) -> None:
     md = query.metadata()
     if "connection" not in md:
+        yield
         return
 
     connection_md = md["connection"]
     if "options" not in connection_md:
+        yield
         return
 
-    conn.adbc_connection.set_options(**connection_md["options"])
+    options = {}
+    options_revert = {}
+    for key, value in connection_md["options"].items():
+        if isinstance(value, dict):
+            assert "apply" in value
+            assert "revert" in value
+            options[key] = value["apply"]
+            options_revert[key] = value["revert"]
+        else:
+            options[key] = value
+
+    conn.adbc_connection.set_options(**options)
+    yield
+    conn.adbc_connection.set_options(**options_revert)
 
 
 def _setup_query(
@@ -212,13 +229,29 @@ def _setup_query(
                     cursor.adbc_statement.execute_update()
 
 
+@contextlib.contextmanager
 def _setup_statement(query: Query, cursor: adbc_driver_manager.dbapi.Cursor) -> None:
     md = query.metadata()
     if "statement" not in md:
+        yield
         return
 
     statement_md = md["statement"]
     if "options" not in statement_md:
+        yield
         return
 
-    cursor.adbc_statement.set_options(**statement_md["options"])
+    options = {}
+    options_revert = {}
+    for key, value in statement_md["options"].items():
+        if isinstance(value, dict):
+            assert "apply" in value
+            assert "revert" in value
+            options[key] = value["apply"]
+            options_revert[key] = value["revert"]
+        else:
+            options[key] = value
+
+    cursor.adbc_statement.set_options(**options)
+    yield
+    cursor.adbc_statement.set_options(**options_revert)
