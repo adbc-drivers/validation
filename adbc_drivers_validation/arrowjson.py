@@ -28,7 +28,12 @@ def load_schema(source: typing.TextIO) -> pyarrow.Schema:
 
 
 def load_table(source: typing.TextIO, schema: pyarrow.Schema) -> pyarrow.Table:
-    rows = [json.loads(line) for line in source]
+    rows = []
+    for line in source:
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON line: {line}") from e
     return table_from_rows(rows, schema)
 
 
