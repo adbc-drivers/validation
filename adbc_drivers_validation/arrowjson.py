@@ -260,6 +260,9 @@ def parse_type_format(
             run_end_type, value_type = children
             return pyarrow.run_end_encoded(run_end_type, value_type)
 
+        elif nested_type == "j":  # JSON Extension Type
+            return pyarrow.json_(pyarrow.string())
+
         else:
             raise ValueError(f"Unknown nested type with format '{type_format}'")
 
