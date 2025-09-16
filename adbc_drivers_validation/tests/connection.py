@@ -19,6 +19,7 @@ To use: import TestConnection and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import re
 import typing
 
 import adbc_driver_manager.dbapi
@@ -116,7 +117,12 @@ class TestConnection:
         assert info.get("driver_name") == driver.driver_name
         assert info.get("vendor_name") == driver.vendor_name
         vendor_version = info.get("vendor_version", "")
-        assert vendor_version == driver.vendor_version
+        if isinstance(driver.vendor_version, re.Pattern):
+            assert driver.vendor_version.match(vendor_version), (
+                f"{vendor_version!r} does not match {driver.vendor_version!r}"
+            )
+        else:
+            assert vendor_version == driver.vendor_version
         assert info.get("driver_arrow_version").startswith("v")
         record_property("vendor_version", vendor_version)
         record_property("short_version", driver.short_version)
