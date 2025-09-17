@@ -34,4 +34,5 @@ def scoped_trace(msg: str) -> None:
     try:
         yield
     except Exception as e:
-        raise ExceptionGroup(msg, [e]) from None
+        e.add_note(msg)
+        raise
