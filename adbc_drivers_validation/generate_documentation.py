@@ -223,7 +223,7 @@ class ValidationReport:
 
 def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
     # Special handling (sometimes we want params, sometimes not)
-    if metadata and (ext := metadata[b"ARROW:extension:name"]):
+    if metadata and (ext := metadata.get(b"ARROW:extension:name")):
         return f"extension<{ext.decode('utf-8')}>"
     if show_type_parameters:
         return str(arrow_type)
