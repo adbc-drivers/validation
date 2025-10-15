@@ -43,7 +43,11 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             f"Field '{field.name}' is not nullable but contains None values"
         )
 
-    if pyarrow.types.is_binary(field.type) or pyarrow.types.is_large_binary(field.type):
+    if (
+        pyarrow.types.is_binary(field.type)
+        or pyarrow.types.is_large_binary(field.type)
+        or pyarrow.types.is_fixed_size_binary(field.type)
+    ):
         values = [
             base64.b64decode(value) if value is not None else None for value in values
         ]
@@ -312,7 +316,7 @@ def parse_type_format(
     # Fixed Width Binary
     if type_format.startswith("w:"):
         width = int(type_format[2:])
-        return pyarrow.fixed_size_binary(width)
+        return pyarrow.binary(width)
 
     # Decimal
     if type_format.startswith("d:"):
