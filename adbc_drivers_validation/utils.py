@@ -15,6 +15,11 @@
 import contextlib
 import typing
 
+import adbc_driver_manager.dbapi
+
+if typing.TYPE_CHECKING:
+    from adbc_drivers_validation.model import Query
+
 
 def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> None:
     for key, value in values.items():
@@ -36,3 +41,31 @@ def scoped_trace(msg: str) -> None:
     except Exception as e:
         e.add_note(msg)
         raise
+
+
+@contextlib.contextmanager
+def setup_statement(query: "Query", cursor: adbc_driver_manager.dbapi.Cursor) -> None:
+    md = query.metadata()
+    if "statement" not in md:
+        yield
+        return
+
+    statement_md = md["statement"]
+    if "options" not in statement_md:
+        yield
+        return
+
+    options = {}
+    options_revert = {}
+    for key, value in statement_md["options"].items():
+        if isinstance(value, dict):
+            assert "apply" in value
+            assert "revert" in value
+            options[key] = value["apply"]
+            options_revert[key] = value["revert"]
+        else:
+            options[key] = value
+
+    cursor.adbc_statement.set_options(**options)
+    yield
+    cursor.adbc_statement.set_options(**options_revert)

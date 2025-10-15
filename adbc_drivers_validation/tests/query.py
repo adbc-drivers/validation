@@ -28,7 +28,7 @@ import pytest
 
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
-from adbc_drivers_validation.utils import scoped_trace
+from adbc_drivers_validation.utils import scoped_trace, setup_statement
 
 
 def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
@@ -112,7 +112,7 @@ class TestQuery:
                 cursor.adbc_statement.execute_update()
 
         with conn.cursor() as cursor:
-            with _setup_statement(query, cursor):
+            with setup_statement(query, cursor):
                 cursor.adbc_statement.set_sql_query(sql)
                 handle, _ = cursor.adbc_statement.execute_query()
                 with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
@@ -135,7 +135,7 @@ class TestQuery:
         _setup_query(driver, conn, query)
 
         with conn.cursor() as cursor:
-            with _setup_statement(query, cursor):
+            with setup_statement(query, cursor):
                 schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)
@@ -227,31 +227,3 @@ def _setup_query(
                 with scoped_trace(f"setup statement: {statement}"):
                     cursor.adbc_statement.set_sql_query(statement)
                     cursor.adbc_statement.execute_update()
-
-
-@contextlib.contextmanager
-def _setup_statement(query: Query, cursor: adbc_driver_manager.dbapi.Cursor) -> None:
-    md = query.metadata()
-    if "statement" not in md:
-        yield
-        return
-
-    statement_md = md["statement"]
-    if "options" not in statement_md:
-        yield
-        return
-
-    options = {}
-    options_revert = {}
-    for key, value in statement_md["options"].items():
-        if isinstance(value, dict):
-            assert "apply" in value
-            assert "revert" in value
-            options[key] = value["apply"]
-            options_revert[key] = value["revert"]
-        else:
-            options[key] = value
-
-    cursor.adbc_statement.set_options(**options)
-    yield
-    cursor.adbc_statement.set_options(**options_revert)

@@ -220,7 +220,6 @@ def test_array_from_values_list() -> None:
 
 
 def test_array_from_values_struct() -> None:
-    values = [{"a": 1, "b": base64.b64encode(b"hello").decode("utf-8")}]
     field = pyarrow.field(
         "struct_field",
         pyarrow.struct(
@@ -230,9 +229,15 @@ def test_array_from_values_struct() -> None:
             ]
         ),
     )
+
+    values = [
+        None,
+        {"a": 1, "b": base64.b64encode(b"hello").decode("utf-8")},
+        {"a": None, "b": base64.b64encode(b"hello").decode("utf-8")},
+    ]
     actual = arrowjson.array_from_values(values, field)
     expected = pyarrow.array(
-        [{"a": 1, "b": b"hello"}],
+        [None, {"a": 1, "b": b"hello"}, {"a": None, "b": b"hello"}],
         type=field.type,
     )
     assert actual == expected

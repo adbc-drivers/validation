@@ -28,6 +28,7 @@ import pytest
 
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
+from adbc_drivers_validation.utils import setup_statement
 
 
 def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
@@ -107,7 +108,8 @@ class TestIngest:
 
         with conn.cursor() as cursor:
             cursor.execute(driver.drop_table(table_name=table_name))
-            cursor.adbc_ingest(table_name, data, mode="create")
+            with setup_statement(query, cursor):
+                cursor.adbc_ingest(table_name, data, mode="create")
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")

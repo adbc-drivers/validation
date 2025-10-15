@@ -111,29 +111,41 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             mask=pyarrow.array(mask, type=pyarrow.bool_()) if field.nullable else None,
         )
     elif isinstance(field.type, pyarrow.StructType):
-        children = structlike_from_rows(values, field.type.fields)
-        return pyarrow.StructArray.from_arrays(children, type=field.type)
+        children, valid = structlike_from_rows(values, field.type.fields)
+        if not field.nullable:
+            if not all(valid):
+                raise ValueError(
+                    f"Field '{field.name}' is not nullable but contains None values"
+                )
+        return pyarrow.StructArray.from_arrays(
+            children,
+            type=field.type,
+            mask=pyarrow.array([not v for v in valid], type=pyarrow.bool_()),
+        )
     return pyarrow.array(values, type=field.type)
 
 
 def structlike_from_rows(
     rows: list[dict], fields: list[pyarrow.Field]
-) -> list[pyarrow.Array]:
+) -> tuple[list[pyarrow.Array], list[bool]]:
     cols = []
     for field in fields:
-        values = [row.pop(field.name, None) for row in rows]
+        values = [(row.pop(field.name, None) if row else None) for row in rows]
         array = array_from_values(values, field)
         cols.append(array)
+    valid = [row is not None for row in rows]
 
     for row in rows:
         if row:
             raise ValueError(f"Extra fields in row: {row}")
 
-    return cols
+    return cols, valid
 
 
 def table_from_rows(rows: list[dict], schema: pyarrow.Schema) -> pyarrow.Table:
-    cols = structlike_from_rows(rows, list(schema))
+    cols, valid = structlike_from_rows(rows, list(schema))
+    if not all(valid):
+        raise ValueError("Top-level table cannot have null rows")
     table = pyarrow.Table.from_arrays(cols, schema=schema)
     return table
 
