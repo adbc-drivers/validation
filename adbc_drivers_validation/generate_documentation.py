@@ -449,6 +449,7 @@ def generate_includes(
     WHERE test_name = 'test_get_info'
     """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     version = list(set(v["version"] for v in version))
@@ -474,6 +475,7 @@ def generate_includes(
         ORDER BY vendor_version, tags->>'sql-type-name'
         """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     for test_case in type_tests:
@@ -534,6 +536,7 @@ def generate_includes(
         ORDER BY vendor_version, tags->>'sql-type-name'
         """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     for test_case in type_tests:
@@ -572,6 +575,7 @@ def generate_includes(
         ORDER BY vendor_version, query_name
         """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     for test_case in type_tests:
@@ -610,6 +614,7 @@ def generate_includes(
     GROUP BY vendor_version, test_name
     """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     for test_case in get_objects:
@@ -626,6 +631,7 @@ def generate_includes(
     GROUP BY vendor_version, test_name
     """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     for test_case in get_table_schema:
@@ -649,6 +655,7 @@ def generate_includes(
     GROUP BY vendor_version, test_name
     """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     for test_case in ingest_types:
@@ -679,6 +686,7 @@ def generate_includes(
           properties->>'feature:name'
         """)
         .arrow()
+        .read_all()
         .to_pylist()
     )
     for test_case in custom_features:
