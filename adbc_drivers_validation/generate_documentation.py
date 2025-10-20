@@ -541,11 +541,11 @@ def generate_includes(
     )
     for test_case in type_tests:
         query_set = query_sets[test_case["vendor_version"]]
-        arrow_type_names = {
-            arrow_type_name(field.type)
-            for query_name in test_case["query_names"]
-            for field in query_set.queries[query_name].query.bind_schema()
-        }
+        arrow_type_names = set()
+        for query_name in test_case["query_names"]:
+            bind_schema = query_set.queries[query_name].query.bind_schema()
+            field = bind_schema[-1]
+            arrow_type_names.add(arrow_type_name(field.type, field.metadata))
         sql_type = html.escape(test_case["sql_type"])
         for arrow_type in arrow_type_names:
             arrow_type = html.escape(arrow_type)
