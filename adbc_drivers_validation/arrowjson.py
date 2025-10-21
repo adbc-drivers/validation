@@ -47,6 +47,7 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
         pyarrow.types.is_binary(field.type)
         or pyarrow.types.is_large_binary(field.type)
         or pyarrow.types.is_fixed_size_binary(field.type)
+        or pyarrow.types.is_binary_view(field.type)
     ):
         values = [
             base64.b64decode(value) if value is not None else None for value in values
