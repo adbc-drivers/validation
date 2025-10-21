@@ -229,6 +229,10 @@ def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
         return str(arrow_type)
     elif isinstance(arrow_type, pyarrow.Decimal128Type):
         return "decimal128"
+    elif isinstance(arrow_type, pyarrow.FixedSizeBinaryType):
+        return "fixed_size_binary"
+    elif isinstance(arrow_type, pyarrow.FixedSizeListType):
+        return "fixed_size_binary"
     elif isinstance(arrow_type, pyarrow.ListType):
         return "list"
     elif isinstance(arrow_type, pyarrow.StructType):
