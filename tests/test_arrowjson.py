@@ -184,6 +184,12 @@ def test_load_table_extra_fields():
             id="binary",
         ),
         pytest.param(
+            [base64.b64encode(b"hello").decode("utf-8"), None],
+            pyarrow.field("binary", pyarrow.binary_view(), nullable=True),
+            pyarrow.array([b"hello", None], type=pyarrow.binary_view()),
+            id="binary_view",
+        ),
+        pytest.param(
             [123, "0.012345", None],
             pyarrow.field("decimal", pyarrow.decimal128(38, 10), nullable=True),
             pyarrow.array(
