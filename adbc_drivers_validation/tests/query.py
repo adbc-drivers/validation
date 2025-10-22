@@ -19,7 +19,6 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
-import contextlib
 import typing
 
 import adbc_driver_manager.dbapi
@@ -28,7 +27,11 @@ import pytest
 
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
-from adbc_drivers_validation.utils import scoped_trace, setup_statement
+from adbc_drivers_validation.utils import (
+    scoped_trace,
+    setup_connection,
+    setup_statement,
+)
 
 
 def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
@@ -151,7 +154,7 @@ class TestQuery:
         expected_schema = subquery.expected_schema()
 
         with conn_factory() as conn:
-            with _setup_connection(query, conn):
+            with setup_connection(query, conn):
                 _setup_query(driver, conn, query)
 
                 table_name = None
@@ -173,34 +176,6 @@ class TestQuery:
                 # Ignore the first column which is normally used to sort the table
                 schema = pyarrow.schema(list(schema)[1:])
                 compare.compare_schemas(expected_schema, schema)
-
-
-@contextlib.contextmanager
-def _setup_connection(query: Query, conn: adbc_driver_manager.dbapi.Connection) -> None:
-    md = query.metadata()
-    if "connection" not in md:
-        yield
-        return
-
-    connection_md = md["connection"]
-    if "options" not in connection_md:
-        yield
-        return
-
-    options = {}
-    options_revert = {}
-    for key, value in connection_md["options"].items():
-        if isinstance(value, dict):
-            assert "apply" in value
-            assert "revert" in value
-            options[key] = value["apply"]
-            options_revert[key] = value["revert"]
-        else:
-            options[key] = value
-
-    conn.adbc_connection.set_options(**options)
-    yield
-    conn.adbc_connection.set_options(**options_revert)
 
 
 def _setup_query(

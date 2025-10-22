@@ -14,6 +14,7 @@
 
 import contextlib
 import typing
+import warnings
 
 import adbc_driver_manager.dbapi
 
@@ -44,14 +45,60 @@ def scoped_trace(msg: str) -> None:
 
 
 @contextlib.contextmanager
-def setup_statement(query: "Query", cursor: adbc_driver_manager.dbapi.Cursor) -> None:
+def setup_connection(
+    query: "Query", conn: adbc_driver_manager.dbapi.Connection
+) -> None:
     md = query.metadata()
-    if "statement" not in md:
+    connection_md = None
+
+    if "setup" in md:
+        if "connection" in md["setup"]:
+            connection_md = md["setup"]["connection"]
+
+    if connection_md is None and "connection" in md:
+        connection_md = md["connection"]
+        warnings.warn(
+            f"Toplevel connection in {query.name}.toml is deprecated, use setup.connection instead",
+            DeprecationWarning,
+        )
+
+    if connection_md is None:
         yield
         return
 
-    statement_md = md["statement"]
-    if "options" not in statement_md:
+    options = {}
+    options_revert = {}
+    for key, value in connection_md["options"].items():
+        if isinstance(value, dict):
+            assert "apply" in value
+            assert "revert" in value
+            options[key] = value["apply"]
+            options_revert[key] = value["revert"]
+        else:
+            options[key] = value
+
+    conn.adbc_connection.set_options(**options)
+    yield
+    conn.adbc_connection.set_options(**options_revert)
+
+
+@contextlib.contextmanager
+def setup_statement(query: "Query", cursor: adbc_driver_manager.dbapi.Cursor) -> None:
+    md = query.metadata()
+    statement_md = None
+
+    if "setup" in md:
+        if "statement" in md["setup"]:
+            statement_md = md["setup"]["statement"]
+
+    if statement_md is None and "statement" in md:
+        statement_md = md["statement"]
+        warnings.warn(
+            f"Toplevel statement in {query.name}.toml is deprecated, use setup.statement instead",
+            DeprecationWarning,
+        )
+
+    if statement_md is None:
         yield
         return
 
