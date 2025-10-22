@@ -115,10 +115,11 @@ class TestIngest:
         value = driver.quote_identifier("value")
         select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            with setup_statement(query, cursor):
+                cursor.adbc_statement.set_sql_query(select)
+                handle, _ = cursor.adbc_statement.execute_query()
+                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                    result = reader.read_all()
 
         # TODO: we should also inspect the type name and make sure it matches the
         # metadata
