@@ -16,7 +16,22 @@
 
 # Driver Validation Suite
 
-## Adding New Tests
+A reusable, pluggable test suite for ADBC drivers written with Python and
+[pytest](https://docs.pytest.org/en/stable/).  The test suite exercises
+various ADBC features and different data types, generating a table of
+supported (and unsupported) features.  It can accommodate database-specific
+syntax and quirks.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Installation & Usage
+
+There are no real docs yet.  It is recommended to look at an existing driver
+to see how to set it up.
+
+### Adding New Tests
 
 The validation suite essentially runs a bunch of SQL queries against each
 driver.  The queries are tagged with various bits of metadata that are used to
@@ -31,6 +46,9 @@ present.
 All queries have an optional `query.toml` file defining various metadata:
 
 - `hide` (`bool`) - if `true`, don't run this query (for this driver)
+- `skip` (`str`) - if present, skip the query with the given reason (for this
+  driver).  `hide` will effectively remove an entry from the generated
+  documentation, while `skip` will instead show that the entry is unsupported.
 - `sort-keys` (`list[tuple[str, 'ascending' | 'descending']]`) - if present,
   sort the result set by these columns before comparison
 - `tags` table:
@@ -73,7 +91,7 @@ the result table.  It consists of:
 - `query.json` (optional) - the data of the result set (in JSON Lines) (by
   default it is assumed to be the same as the input)
 
-### Overriding Tests with Driver-Specific Tests
+#### Overriding Tests with Driver-Specific Tests
 
 Often a driver needs specific changes to a test case, e.g. because it picks a
 different return type.  Also, drivers may support extra features that need

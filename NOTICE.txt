@@ -1,0 +1,2 @@
+ADBC Driver Foundry Driver Validation Suite
+Copyright 2025 ADBC Drivers Contributors
