@@ -16,14 +16,23 @@
 
 # How to Contribute
 
-## Reporting Issues
+All contributors are expected to follow the [Code of
+Conduct](https://github.com/adbc-drivers/validation?tab=coc-ov-file#readme).
 
-Please file issues on the GitHub issue tracker:
-https://github.com/adbc-drivers/validation/issues
+## Reporting Issues and Making Feature Requests
+
+Please file issues, questions, and feature requests on the GitHub issue
+tracker: https://github.com/adbc-drivers/validation/issues
 
 Potential security vulnerabilities should be reported to
 [security@adbc-drivers.org](mailto:security@adbc-drivers.org) instead.  See
-[SECURITY.md](./SECURITY.md).
+the [Security Policy](https://github.com/adbc-drivers/validation?tab=security-ov-file#readme).
+
+## Setting Up a Developer Environment
+
+1. Install [Python](https://www.python.org/).
+1. Create a virtual environment, if needed.
+1. Install the project: `pip install --editable .`.
 
 ## Opening a Pull Request
 
@@ -44,6 +53,7 @@ When writing the pull request description:
 - Ensure the title follows [Conventional
   Commits](https://www.conventionalcommits.org/en/v1.0.0/) format.  No
   component is necessary.  Example titles:
+
   - `feat: test ingestion with target schema`
   - `fix: don't assume SQLSTATE values`
   - `feat!: test multiple types in one query`
