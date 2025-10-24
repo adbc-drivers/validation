@@ -132,9 +132,7 @@ def scalar_to_py_smart(value: pyarrow.Scalar) -> typing.Any:
         instant = whenever.Instant.from_timestamp_nanos(nanos)
         if value.type.tz is None or value.type.tz == "":
             # A bit sketch
-            naive = whenever.PlainDateTime.parse_common_iso(
-                instant.format_common_iso()[:-1]
-            )
+            naive = whenever.PlainDateTime.parse_iso(instant.format_iso()[:-1])
             return str(naive)
         elif value.type.tz == "UTC":
             return str(instant)
