@@ -70,6 +70,7 @@ class DriverTypeTable:
     get_objects: dict[str, bool] = dataclasses.field(default_factory=dict)
     get_table_schema: bool = False
     ingest: dict[str, bool] = dataclasses.field(default_factory=dict)
+    vendor_version: str = "unknown"
 
     def pprint(self) -> str:
         # Slightly more friendly representation for debugging
@@ -406,9 +407,12 @@ def render(
         ref = f"driver-{driver}-{report.driver_version}"
         version_header = f"Driver Version {{bdg-ref-primary}}`{report.driver_version} <{ref}>` ({{ref}}`permalink to this version <{ref}>`)"
 
-    version_header += f"\n<br/>Tested With {default_version_info.quirks.vendor_name}:"
+    version_header += f"\n<br/>Tested with {default_version_info.quirks.vendor_name}:"
     for version in sorted(report.versions):
         version_header += f" {{bdg-secondary}}`{version}`"
+    version_header += "\n\nFull Versions Tested:\n"
+    for version in sorted(report.versions):
+        version_header += f"\n- {report.versions[version].vendor_version}"
 
     if is_prerelease:
         version_header += (
@@ -433,7 +437,7 @@ def render(
 def generate_includes(
     all_quirks: list[model.DriverQuirks], query_sets: dict[str, model.QuerySet]
 ) -> dict[str, DriverTypeTable]:
-    # Handle different versions of one driver
+    # Handle different versions of one vendor
     report = ValidationReport(
         driver=all_quirks[0].name,
         versions={
@@ -449,17 +453,23 @@ def generate_includes(
         duckdb.sql("""
     FROM testcases
     SELECT
-      properties->>'driver_version' AS version,
+      properties->>'driver_version' AS driver_version,
+      properties->>'short_version' AS short_version,
+      properties->>'vendor_version' AS vendor_version,
     WHERE test_name = 'test_get_info'
     """)
         .arrow()
         .read_all()
         .to_pylist()
     )
-    version = list(set(v["version"] for v in version))
-    if len(version) != 1:
-        raise ValueError(f"Expected one driver version, got {version}")
-    report.driver_version = version[0]
+    driver_version = list(set(v["driver_version"] for v in version))
+    if len(driver_version) != 1:
+        raise ValueError(f"Expected one driver version, got {driver_version}")
+    report.driver_version = driver_version[0]
+    for v in version:
+        short_version = v["short_version"]
+        vendor_version = v["vendor_version"]
+        report.versions[short_version].vendor_version = vendor_version
 
     # Select type support
     type_tests = (
