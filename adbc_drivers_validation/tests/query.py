@@ -116,10 +116,13 @@ class TestQuery:
 
         with conn.cursor() as cursor:
             with setup_statement(query, cursor):
-                cursor.adbc_statement.set_sql_query(sql)
-                handle, _ = cursor.adbc_statement.execute_query()
-                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                    result = reader.read_all()
+                with scoped_trace(f"query: {sql}"):
+                    cursor.adbc_statement.set_sql_query(sql)
+                    handle, _ = cursor.adbc_statement.execute_query()
+                    with pyarrow.RecordBatchReader._import_from_c(
+                        handle.address
+                    ) as reader:
+                        result = reader.read_all()
 
         compare.compare_tables(expected_result, result, query.metadata())
 
@@ -200,5 +203,11 @@ def _setup_query(
             statements.extend(driver.split_statement(setup))
             for statement in statements:
                 with scoped_trace(f"setup statement: {statement}"):
-                    cursor.adbc_statement.set_sql_query(statement)
-                    cursor.adbc_statement.execute_update()
+                    try:
+                        cursor.adbc_statement.set_sql_query(statement)
+                        cursor.adbc_statement.execute_update()
+                    except adbc_driver_manager.Error as e:
+                        # Some databases have no way to do DROP IF EXISTS
+                        if driver.is_table_not_found(table_name=statement, error=e):
+                            continue
+                        raise
