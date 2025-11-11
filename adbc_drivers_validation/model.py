@@ -222,8 +222,19 @@ class DriverQuirks(abc.ABC):
             return f"DROP TABLE {name}"
 
     @abc.abstractmethod
-    def is_table_not_found(self, table_name: str, error: Exception) -> bool:
-        """Check if the error indicates a table not found."""
+    def is_table_not_found(self, table_name: str | None, error: Exception) -> bool:
+        """
+        Check if the error indicates a table not found.
+
+        Parameters
+        ----------
+        table_name : str, optional
+            The table that was expected to not be found.  Pass None to only
+            check if the error was of this general category and not for a
+            specific table.
+        error : Exception
+            The error to check.
+        """
         ...
 
     def qualify_temp_table(
