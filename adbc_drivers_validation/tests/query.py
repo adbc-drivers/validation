@@ -208,6 +208,6 @@ def _setup_query(
                         cursor.adbc_statement.execute_update()
                     except adbc_driver_manager.Error as e:
                         # Some databases have no way to do DROP IF EXISTS
-                        if driver.is_table_not_found(table_name=statement, error=e):
+                        if driver.is_table_not_found(table_name=None, error=e):
                             continue
                         raise
