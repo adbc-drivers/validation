@@ -180,6 +180,39 @@ class TestQuery:
                 schema = pyarrow.schema(list(schema)[1:])
                 compare.compare_schemas(expected_schema, schema)
 
+    def test_show_queries(
+        self,
+        driver: model.DriverQuirks,
+        query: model.Query,
+    ) -> None:
+        """Print out basic query metadata for debugging/development."""
+        print(query.name.ljust(30), ":", end=" ")
+        if isinstance(query.query, model.IngestQuery):
+            schema = query.query.expected_schema()
+            field = schema[1]
+            print(
+                str(field.type).ljust(40),
+                "=>",
+                query.metadata()["tags"]["sql-type-name"],
+            )
+        elif isinstance(query.query, model.SelectQuery):
+            schema = query.query.expected_schema()
+            field = schema[0]
+            if query.query.bind_path is not None:
+                print(
+                    str(field.type).ljust(40),
+                    "=>",
+                    query.metadata()["tags"]["sql-type-name"],
+                )
+            else:
+                print(
+                    query.metadata()["tags"]["sql-type-name"].ljust(40),
+                    "=>",
+                    field.type,
+                )
+        else:
+            raise TypeError(type(query.query))
+
 
 def _setup_query(
     driver: model.DriverQuirks,

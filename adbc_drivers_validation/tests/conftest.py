@@ -32,6 +32,7 @@ pytest.register_assert_rewrite("adbc_drivers_validation.tests.statement")
 
 def pytest_addoption(parser):
     parser.addoption("--repl", action="store_true", default=False)
+    parser.addoption("--show-queries", action="store_true", default=False)
 
 
 def pytest_collection_modifyitems(
@@ -71,6 +72,15 @@ def pytest_collection_modifyitems(
         items[:] = [item for item in items if item.name.startswith("test_repl[")]
     else:
         items[:] = [item for item in items if not item.name.startswith("test_repl[")]
+
+    if config.getoption("--show-queries"):
+        items[:] = [
+            item for item in items if item.name.startswith("test_show_queries[")
+        ]
+    else:
+        items[:] = [
+            item for item in items if not item.name.startswith("test_show_queries[")
+        ]
 
 
 @pytest.fixture(scope="session")

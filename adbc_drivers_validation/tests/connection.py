@@ -278,7 +278,12 @@ class TestConnection:
             table_name,
         )
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=None, error=e):
+                    raise
 
         objects = conn.adbc_get_objects(depth="tables").read_all().to_pylist()
         tables = [
@@ -390,7 +395,12 @@ class TestConnection:
             table_name,
         )
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=None, error=e):
+                    raise
 
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
         columns = [
@@ -563,7 +573,12 @@ class TestConnection:
             schema=schema,
         )
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=None, error=e):
+                    raise
             cursor.adbc_ingest(table_name, data)
 
         objects = (
@@ -636,7 +651,13 @@ class TestConnection:
         )
         with conn.cursor() as cursor:
             for table in table_names:
-                stmt = driver.drop_table(table_name=table)
+                try:
+                    stmt = driver.drop_table(table_name=table)
+                except adbc_driver_manager.Error as e:
+                    # Some databases have no way to do DROP IF EXISTS
+                    if not driver.is_table_not_found(table_name=None, error=e):
+                        raise
+
                 with scoped_trace(stmt):
                     cursor.execute(stmt)
 
