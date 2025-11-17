@@ -402,20 +402,23 @@ def render(
 
     if is_prerelease:
         ref = f"driver-{driver}-prerelease"
-        version_header = f"Driver Version {{bdg-primary}}`{report.driver_version}`"
+        heading = f"{{badge-primary}}`Driver Version|{report.driver_version}`"
     else:
         ref = f"driver-{driver}-{report.driver_version}"
-        version_header = f"Driver Version {{bdg-ref-primary}}`{report.driver_version} <{ref}>` ({{ref}}`permalink to this version <{ref}>`)"
+        heading = f"{{badge-primary}}`Driver Version|{report.driver_version}|#{ref}` ({{ref}}`permalink to this version <{ref}>`)"
 
-    version_header += f"\n<br/>Tested with {default_version_info.quirks.vendor_name}:"
+    # TODO: Improve this display for drivers tested with many versions. We
+    # probably want to show one badge with a range rather than a badge for every
+    # version
     for version in sorted(report.versions):
-        version_header += f" {{bdg-secondary}}`{version}`"
-    version_header += "\n\nFull Versions Tested:\n"
+        heading += f" {{badge-success}}`Tested With|{default_version_info.quirks.vendor_name} {version}`"
+
+    version_detail = f"\n\nThis driver was tested on the following versions of {default_version_info.quirks.vendor_name}:\n"
     for version in sorted(report.versions):
-        version_header += f"\n- {report.versions[version].vendor_version}"
+        version_detail += f"\n- {report.versions[version].vendor_version}"
 
     if is_prerelease:
-        version_header += (
+        heading += (
             "\n\n:::{warning}\nThis is documentation for a prerelease version.\n:::"
         )
 
@@ -428,8 +431,9 @@ def render(
             "features": features,
             "footnotes": footnotes,
             "cross_reference": f"({ref})=",
-            "version_header": version_header,
+            "heading": heading,
             "version": report.driver_version,
+            "version_detail": version_detail
         },
     )
 
