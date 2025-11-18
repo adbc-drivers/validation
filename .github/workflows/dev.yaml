@@ -15,7 +15,8 @@
 name: Dev
 
 on:
-  pull_request: {}
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - main
