@@ -255,30 +255,20 @@ class TestConnection:
         ]
         assert schemas == []
 
-    def test_get_objects_table(
-        self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks
+    def test_get_objects_table_not_exist(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
     ) -> None:
-        table_name = "getobjectstest"
-        schema = pyarrow.schema(
-            [
-                ("ints", pyarrow.int32()),
-                ("strs", pyarrow.string()),
-            ]
-        )
-        data = pyarrow.Table.from_pydict(
-            {
-                "ints": [1, None, 42],
-                "strs": [None, "foo", "spam"],
-            },
-            schema=schema,
-        )
-        table_id = (
-            driver.features.current_catalog,
-            driver.features.current_schema,
-            table_name,
-        )
+        # N.B. table tests are split up so we can more easily override/disable
+        # parts of it
+        table_name = "getobjectstest2"
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
 
         objects = conn.adbc_get_objects(depth="tables").read_all().to_pylist()
         tables = [
@@ -290,11 +280,20 @@ class TestConnection:
         for catalog, schema, table in tables:
             assert table != ""
         assert list(sorted(set(tables))) == list(sorted(tables))
+        table_id = (
+            driver.features.current_catalog,
+            driver.features.current_schema,
+            table_name,
+        )
         assert table_id not in tables
 
-        with conn.cursor() as cursor:
-            cursor.adbc_ingest(table_name, data)
-
+    def test_get_objects_table_present(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = conn.adbc_get_objects(depth="tables").read_all().to_pylist()
         tables = [
             (obj["catalog_name"], schema["db_schema_name"], table["table_name"])
@@ -305,6 +304,13 @@ class TestConnection:
         assert list(sorted(set(tables))) == list(sorted(tables))
         assert table_id in tables
 
+    def test_get_objects_table_invalid_catalog(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(
                 depth="tables", catalog_filter="thiscatalogdoesnotexist"
@@ -321,6 +327,13 @@ class TestConnection:
         assert list(sorted(set(tables))) == list(sorted(tables))
         assert table_id not in tables
 
+    def test_get_objects_table_invalid_schema(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(
                 depth="tables", db_schema_filter="thiscatalogdoesnotexist"
@@ -337,6 +350,13 @@ class TestConnection:
         assert list(sorted(set(tables))) == list(sorted(tables))
         assert table_id not in tables
 
+    def test_get_objects_table_invalid_table(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(
                 depth="tables", table_name_filter="thiscatalogdoesnotexist"
@@ -353,8 +373,15 @@ class TestConnection:
         assert list(sorted(set(tables))) == list(sorted(tables))
         assert table_id not in tables
 
+    def test_get_objects_table_exact_table(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
-            conn.adbc_get_objects(depth="tables", table_name_filter=table_name)
+            conn.adbc_get_objects(depth="tables", table_name_filter=table_id[2])
             .read_all()
             .to_pylist()
         )
@@ -367,31 +394,12 @@ class TestConnection:
         assert list(sorted(set(tables))) == list(sorted(tables))
         assert table_id in tables
 
-    def test_get_objects_column(
-        self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks
+    def test_get_objects_column_not_exist(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
     ) -> None:
-        table_name = "getobjectstest"
-        schema = pyarrow.schema(
-            [
-                ("ints", pyarrow.int32()),
-                ("strs", pyarrow.string()),
-            ]
-        )
-        data = pyarrow.Table.from_pydict(
-            {
-                "ints": [1, None, 42],
-                "strs": [None, "foo", "spam"],
-            },
-            schema=schema,
-        )
-        table_id = (
-            driver.features.current_catalog,
-            driver.features.current_schema,
-            table_name,
-        )
-        with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
-
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
         columns = [
             (
@@ -406,12 +414,21 @@ class TestConnection:
             for column in table["table_columns"]
         ]
         assert list(sorted(set(columns))) == list(sorted(columns))
+        table_id = (
+            driver.features.current_catalog,
+            driver.features.current_schema,
+            "getobjectstest2",
+        )
         for catalog, schema, table, column in columns:
             assert (catalog, schema, table) != table_id
 
-        with conn.cursor() as cursor:
-            cursor.adbc_ingest(table_name, data)
-
+    def test_get_objects_column_present(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
         columns = [
             (
@@ -429,6 +446,13 @@ class TestConnection:
         assert (*table_id, "ints") in columns
         assert (*table_id, "strs") in columns
 
+    def test_get_objects_column_filter_column_name(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(depth="columns", column_name_filter="ints")
             .read_all()
@@ -450,8 +474,15 @@ class TestConnection:
         assert (*table_id, "ints") in columns
         assert (*table_id, "strs") not in columns
 
+    def test_get_objects_column_filter_table_name(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
-            conn.adbc_get_objects(depth="columns", table_name_filter=table_name)
+            conn.adbc_get_objects(depth="columns", table_name_filter=table_id[-1])
             .read_all()
             .to_pylist()
         )
@@ -472,6 +503,13 @@ class TestConnection:
         assert (*table_id, "strs") in columns
         assert len(columns) == 2
 
+    def test_get_objects_column_filter_catalog(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(
                 depth="columns", catalog_filter=driver.features.current_catalog
@@ -495,6 +533,13 @@ class TestConnection:
         assert (*table_id, "ints") in columns
         assert (*table_id, "strs") in columns
 
+    def test_get_objects_column_filter_schema(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(
                 depth="columns",
@@ -520,12 +565,19 @@ class TestConnection:
         assert (*table_id, "ints") in columns
         assert (*table_id, "strs") in columns
 
+    def test_get_objects_column_filter_table(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
+    ) -> None:
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(
                 depth="columns",
                 catalog_filter=driver.features.current_catalog,
                 db_schema_filter=driver.features.current_schema,
-                table_name_filter=table_name,
+                table_name_filter=table_id[-1],
             )
             .read_all()
             .to_pylist()
@@ -546,32 +598,18 @@ class TestConnection:
         assert columns == [(*table_id, "ints"), (*table_id, "strs")]
 
     def test_get_objects_column_xdbc(
-        self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        driver: model.DriverQuirks,
+        get_objects_table,
     ) -> None:
-        table_name = "getobjectstest"
-        schema = pyarrow.schema(
-            [
-                ("ints", pyarrow.int32()),
-                ("strs", pyarrow.string()),
-            ]
-        )
-        data = pyarrow.Table.from_pydict(
-            {
-                "ints": [1, None, 42],
-                "strs": [None, "foo", "spam"],
-            },
-            schema=schema,
-        )
-        with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
-            cursor.adbc_ingest(table_name, data)
-
+        table_id = get_objects_table
         objects = (
             conn.adbc_get_objects(
                 depth="columns",
                 catalog_filter=driver.features.current_catalog,
                 db_schema_filter=driver.features.current_schema,
-                table_name_filter=table_name,
+                table_name_filter=table_id[-1],
             )
             .read_all()
             .to_pylist()
@@ -594,7 +632,7 @@ class TestConnection:
             {
                 "catalog": driver.features.current_catalog,
                 "schema": driver.features.current_schema,
-                "table": table_name,
+                "table": table_id[-1],
                 "column_name": "ints",
                 "ordinal_position": 1,
             },
@@ -604,7 +642,7 @@ class TestConnection:
             {
                 "catalog": driver.features.current_catalog,
                 "schema": driver.features.current_schema,
-                "table": table_name,
+                "table": table_id[-1],
                 "column_name": "strs",
                 "ordinal_position": 2,
             },
@@ -618,6 +656,52 @@ class TestConnection:
                     assert column[field] == 1
                 elif field == "xdbc_is_nullable":
                     assert column[field] == "YES"
+
+    @pytest.fixture(scope="class")
+    def get_objects_table(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ):
+        with conn.cursor() as cursor:
+            table_name = "getobjectstest"
+            schema = pyarrow.schema(
+                [
+                    ("ints", pyarrow.int32()),
+                    ("strs", pyarrow.string()),
+                ]
+            )
+            data = pyarrow.Table.from_pydict(
+                {
+                    "ints": [1, None, 42],
+                    "strs": [None, "foo", "spam"],
+                },
+                schema=schema,
+            )
+            table_id = (
+                driver.features.current_catalog,
+                driver.features.current_schema,
+                table_name,
+            )
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(driver.drop_table(table_name=table_name))
+                except adbc_driver_manager.Error as e:
+                    # Some databases have no way to do DROP IF EXISTS
+                    if not driver.is_table_not_found(table_name=None, error=e):
+                        raise
+
+                cursor.adbc_ingest(table_name, data)
+
+            yield table_id
+
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(driver.drop_table(table_name=table_name))
+                except adbc_driver_manager.Error as e:
+                    # Some databases have no way to do DROP IF EXISTS
+                    if not driver.is_table_not_found(table_name=None, error=e):
+                        raise
 
     @pytest.fixture(scope="class")
     def get_objects_constraints(
@@ -636,7 +720,13 @@ class TestConnection:
         )
         with conn.cursor() as cursor:
             for table in table_names:
-                stmt = driver.drop_table(table_name=table)
+                try:
+                    stmt = driver.drop_table(table_name=table)
+                except adbc_driver_manager.Error as e:
+                    # Some databases have no way to do DROP IF EXISTS
+                    if not driver.is_table_not_found(table_name=None, error=e):
+                        raise
+
                 with scoped_trace(stmt):
                     cursor.execute(stmt)
 
