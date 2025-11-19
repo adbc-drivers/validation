@@ -413,7 +413,7 @@ def render(
     for version in sorted(report.versions):
         heading += f" {{badge-success}}`Tested With|{default_version_info.quirks.vendor_name} {version}`"
 
-    version_detail = f"\n\nThis driver was tested on the following versions of {default_version_info.quirks.vendor_name}:\n"
+    version_detail = f"This driver was tested on the following versions of {default_version_info.quirks.vendor_name}:\n"
     for version in sorted(report.versions):
         version_detail += f"\n- {report.versions[version].vendor_version}"
 
