@@ -107,7 +107,13 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
+
             with setup_statement(query, cursor):
                 cursor.adbc_ingest(table_name, data, mode="create")
 
@@ -146,7 +152,12 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             cursor.adbc_ingest(table_name, data, mode="create")
             cursor.adbc_ingest(table_name, data2, mode="append")
 
@@ -186,7 +197,12 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             with pytest.raises(adbc_driver_manager.dbapi.Error) as excinfo:
                 cursor.adbc_ingest(table_name, data, mode="append")
 
@@ -212,7 +228,12 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             cursor.adbc_ingest(table_name, data, mode="create_append")
             cursor.adbc_ingest(table_name, data2, mode="create_append")
 
@@ -252,7 +273,12 @@ class TestIngest:
         data2 = data.slice(0, 1)
 
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             cursor.adbc_ingest(table_name, data, mode="replace")
             if driver.name == "bigquery":
                 # BigQuery rate-limits metadata operations
@@ -284,7 +310,12 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             cursor.adbc_ingest(table_name, data, mode="replace")
 
         idx = driver.quote_identifier("idx")
@@ -322,7 +353,12 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            cursor.execute(driver.drop_table(table_name=table_name))
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             cursor.adbc_ingest(table_name, data, mode="create")
 
         objects = (
@@ -398,7 +434,12 @@ class TestIngest:
 
         with conn_factory() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(driver.drop_table(table_name=table_name))
+                try:
+                    cursor.execute(driver.drop_table(table_name=table_name))
+                except adbc_driver_manager.Error as e:
+                    # Some databases have no way to do DROP IF EXISTS
+                    if not driver.is_table_not_found(table_name=table_name, error=e):
+                        raise
                 cursor.adbc_ingest(table_name, data1, temporary=True)
                 cursor.adbc_ingest(table_name, data2, temporary=False)
 
@@ -441,12 +482,17 @@ class TestIngest:
         table_name = "test_ingest_schema"
         schema_name = driver.features.secondary_schema
         with conn.cursor() as cursor:
-            cursor.execute(
-                driver.drop_table(
-                    table_name=table_name,
-                    schema_name=schema_name,
+            try:
+                cursor.execute(
+                    driver.drop_table(
+                        table_name=table_name,
+                        schema_name=schema_name,
+                    )
                 )
-            )
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             cursor.adbc_ingest(
                 table_name,
                 data,
@@ -479,13 +525,18 @@ class TestIngest:
         schema_name = driver.features.secondary_catalog_schema
         catalog_name = driver.features.secondary_catalog
         with conn.cursor() as cursor:
-            cursor.execute(
-                driver.drop_table(
-                    table_name=table_name,
-                    schema_name=schema_name,
-                    catalog_name=catalog_name,
+            try:
+                cursor.execute(
+                    driver.drop_table(
+                        table_name=table_name,
+                        schema_name=schema_name,
+                        catalog_name=catalog_name,
+                    )
                 )
-            )
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
             cursor.adbc_ingest(
                 table_name,
                 data,
