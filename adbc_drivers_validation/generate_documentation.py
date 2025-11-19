@@ -433,7 +433,7 @@ def render(
             "cross_reference": f"({ref})=",
             "heading": heading,
             "version": report.driver_version,
-            "version_detail": version_detail
+            "version_detail": version_detail,
         },
     )
 
