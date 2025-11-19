@@ -413,9 +413,9 @@ def render(
     for version in sorted(report.versions):
         heading += f" {{badge-success}}`Tested With|{default_version_info.quirks.vendor_name} {version}`"
 
-    version_detail = f"This driver was tested on the following versions of {default_version_info.quirks.vendor_name}:\n"
+    compatibility_info = f"This driver was tested on the following versions of {default_version_info.quirks.vendor_name}:\n"
     for version in sorted(report.versions):
-        version_detail += f"\n- {report.versions[version].vendor_version}"
+        compatibility_info += f"\n- {report.versions[version].vendor_version}"
 
     if is_prerelease:
         heading += (
@@ -433,7 +433,7 @@ def render(
             "cross_reference": f"({ref})=",
             "heading": heading,
             "version": report.driver_version,
-            "version_detail": version_detail,
+            "compatibility_info": compatibility_info,
         },
     )
 
