@@ -14,7 +14,7 @@
   limitations under the License.
 #}
 
-#### SELECT (SQL to Arrow) type mapping
+#### {{quirks.vendor_name}} to Arrow
 
 :::{list-table}
 :header-rows: 1
@@ -31,36 +31,21 @@
 {{ "" }}
 :::
 
-#### Bind parameter (Arrow to SQL) type mapping
+#### Arrow to {{quirks.vendor_name}}
 
 :::{list-table}
 :header-rows: 1
 :width: 100%
-:widths: 1 3
+:widths: 1 1 1
 
 * - Arrow Type
-  - SQL Type
+  - {{quirks.vendor_name}} Type<br/>Bind
+  - {{quirks.vendor_name}} Type<br/>Ingest
 
-{%- for arrow_type, sql_type in type_bind|sort %}
+{%- for arrow_type, sql_type_bind, sql_type_ingest in type_bind_ingest|sort %}
 * - {{ arrow_type }}
-  - {{ sql_type }}
-{%- endfor -%}
-{{ "" }}
-:::
-
-#### Bulk ingest (Arrow to SQL) type mapping
-
-:::{list-table}
-:header-rows: 1
-:width: 100%
-:widths: 1 3
-
-* - Arrow Type
-  - SQL Type
-
-{%- for arrow_type, sql_type in type_ingest|sort %}
-* - {{ arrow_type }}
-  - {{ sql_type }}
+  - {{ sql_type_bind }}
+  - {{ sql_type_ingest }}
 {%- endfor -%}
 {{ "" }}
 :::
