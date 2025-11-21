@@ -21,7 +21,7 @@
 :width: 100%
 :widths: 1 3
 
-* - SQL Type
+* - {{quirks.vendor_name}} Type
   - Arrow Type
 
 {%- for sql_type, arrow_type in type_select|sort %}
