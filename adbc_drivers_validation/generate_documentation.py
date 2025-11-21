@@ -589,7 +589,6 @@ def generate_includes(
           test_module LIKE '%TestIngest'
           AND test_name = 'test_create'
           AND (tags->>'sql-type-name') IS NOT NULL
-          AND test_result != 'skipped'
         ORDER BY vendor_version, query_name
         """)
         .arrow()
