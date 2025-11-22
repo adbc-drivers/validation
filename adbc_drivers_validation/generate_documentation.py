@@ -419,7 +419,7 @@ def render(
         heading = f"{{badge-primary}}`Driver Version|{report.driver_version}`"
     else:
         ref = f"driver-{driver}-{report.driver_version}"
-        heading = f"[{{badge-primary}}`Driver Version|{report.driver_version}`](#{ref} \"Permalink\")"
+        heading = f'[{{badge-primary}}`Driver Version|{report.driver_version}`](#{ref} "Permalink")'
 
     # TODO: Improve this display for drivers tested with many versions. We
     # probably want to show one badge with a range rather than a badge for every
