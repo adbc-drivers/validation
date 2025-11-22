@@ -14,14 +14,14 @@
   limitations under the License.
 #}
 
-#### SELECT (SQL to Arrow) type mapping
+#### {{quirks.vendor_name}} to Arrow
 
 :::{list-table}
 :header-rows: 1
 :width: 100%
 :widths: 1 3
 
-* - SQL Type
+* - {{quirks.vendor_name}} Type
   - Arrow Type
 
 {%- for sql_type, arrow_type in type_select|sort %}
@@ -31,36 +31,25 @@
 {{ "" }}
 :::
 
-#### Bind parameter (Arrow to SQL) type mapping
+#### Arrow to {{quirks.vendor_name}}
 
-:::{list-table}
-:header-rows: 1
-:width: 100%
-:widths: 1 3
-
-* - Arrow Type
-  - SQL Type
-
-{%- for arrow_type, sql_type in type_bind|sort %}
-* - {{ arrow_type }}
-  - {{ sql_type }}
-{%- endfor -%}
-{{ "" }}
-:::
-
-#### Bulk ingest (Arrow to SQL) type mapping
-
-:::{list-table}
-:header-rows: 1
-:width: 100%
-:widths: 1 3
-
-* - Arrow Type
-  - SQL Type
-
-{%- for arrow_type, sql_type in type_ingest|sort %}
-* - {{ arrow_type }}
-  - {{ sql_type }}
-{%- endfor -%}
-{{ "" }}
-:::
+<table class="docutils data align-default" style="width: 100%;">
+  <tr>
+    <th rowspan="2" style="text-align: center; vertical-align: middle;">Arrrow Type</th>
+    <th colspan="2" style="text-align: center;">{{quirks.vendor_name}} Type</th>
+  </tr>
+  <tr>
+    <th style="text-align: center;">Bind</th>
+    <th style="text-align: center;">Ingest</th>
+  </tr>
+{%- for arrow_type, sql_type_bind, sql_type_ingest in type_bind_ingest|sort %}
+<tr>
+  <td>{{ arrow_type }}</td>
+{%- if sql_type_bind == sql_type_ingest %}
+<td colspan="2" style="text-align: center;">{{ sql_type_bind }}</td>
+{% else %}
+<td style="text-align: center;">{{ sql_type_bind }}</td><td style="text-align: center;">{{ sql_type_ingest }}</td>
+{% endif %}
+</tr>
+{%- endfor %}
+</table>
