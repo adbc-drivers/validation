@@ -31,10 +31,6 @@ import pyarrow
 
 from . import model
 
-LABEL_SUPPORTED = '<span title="Supported">✅</span>'
-LABEL_PARTIALLY_SUPPORTED = '<span title="Partially Supported">⚠️</span>'
-LABEL_UNSUSPPORTED = '<span title="Unsupported">❌</span>'
-
 
 @dataclasses.dataclass
 class CustomFeature:
@@ -89,23 +85,23 @@ class DriverTypeTable:
 
             value = getattr(self.features, field.name)
             if isinstance(value, bool):
-                value = LABEL_SUPPORTED if value else LABEL_UNSUSPPORTED
+                value = "✅" if value else "❌"
             lines.append(f"- {field.name}: {value}")
 
         for group, features in self.custom_features.groups.items():
             lines.append(f"- {group}:")
             for feature in features:
-                status = LABEL_SUPPORTED if feature.supported else LABEL_UNSUSPPORTED
+                status = "✅" if feature.supported else "❌"
                 lines.append(f"  - {feature.name}: {status} {feature.description}")
 
         lines.append("")
         lines.append("GetObjects")
         lines.append("~~~~~~~~~~")
         for name, supported in self.get_objects.items():
-            status = LABEL_SUPPORTED if supported else LABEL_UNSUSPPORTED
+            status = "✅" if supported else "❌"
             lines.append(f"- {name}: {status}")
 
-        status = LABEL_SUPPORTED if self.get_table_schema else LABEL_UNSUSPPORTED
+        status = "✅" if self.get_table_schema else "❌"
         lines.append("")
         lines.append(f"GetTableSchema: {status}")
 
@@ -113,7 +109,7 @@ class DriverTypeTable:
         lines.append("Ingest Modes")
         lines.append("~~~~~~~~~~~~")
         for name, supported in self.ingest.items():
-            status = LABEL_SUPPORTED if supported else LABEL_UNSUSPPORTED
+            status = "✅" if supported else "❌"
             lines.append(f"- {name}: {status}")
 
         def render_type_table(category: str, entries: list[tuple[str, str]]) -> None:
@@ -201,11 +197,11 @@ class ValidationReport:
                 caveats.append(caveat)
 
         if passed == 0:
-            table_entry = LABEL_UNSUSPPORTED
+            table_entry = "❌"
         elif (
             partial_support or passed < len(test_case["test_results"]) or extra_caveats
         ):
-            table_entry += f" {LABEL_PARTIALLY_SUPPORTED}"
+            table_entry += " ⚠️"
             for query_name, result in zip(
                 test_case["query_names"], test_case["test_results"]
             ):
