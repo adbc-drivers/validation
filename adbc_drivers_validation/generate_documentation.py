@@ -386,6 +386,20 @@ def render(
         **dataclasses.asdict(report.versions[default_vendor_version]),
         "driver": report.driver,
     }
+
+    # Combine bind and ingest into a single type_bind_ingest table
+    # TODO: This could be factored up into add_table_entry or something but that
+    # method is built for a two-column table not three. Or this could be done
+    # entirely with SQL.
+    #
+    # This makes a list with 3-tuple items: (arrow_type, bind_type, ingest_type)
+    bind_dict = dict(template_vars["type_bind"])
+    ingest_dict = dict(template_vars["type_ingest"])
+    template_vars["type_bind_ingest"] = [
+        (k, bind_dict.get(k), ingest_dict.get(k))
+        for k in set(bind_dict) | set(ingest_dict)
+    ]
+
     types = render_part(env.get_template("types.md"), template_vars)
     features = render_part(env.get_template("features.md"), template_vars)
     footnotes = render_part(
@@ -405,7 +419,7 @@ def render(
         heading = f"{{badge-primary}}`Driver Version|{report.driver_version}`"
     else:
         ref = f"driver-{driver}-{report.driver_version}"
-        heading = f"[{{badge-primary}}`Driver Version|{report.driver_version}`]({ref})"
+        heading = f'[{{badge-primary}}`Driver Version|{report.driver_version}`](#{ref} "Permalink")'
 
     # TODO: Improve this display for drivers tested with many versions. We
     # probably want to show one badge with a range rather than a badge for every
