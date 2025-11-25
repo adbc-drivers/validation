@@ -46,9 +46,24 @@
 <tr>
   <td>{{ arrow_type }}</td>
 {%- if sql_type_bind == sql_type_ingest %}
-<td colspan="2" style="text-align: center;">{{ sql_type_bind }}</td>
+{# Note: The blank lines below make footnotes work #}
+{# See https://github.com/adbc-drivers/validation/issues/114 #}
+<td colspan="2" style="text-align: center;">
+
+{{ sql_type_bind }}
+
+</td>
 {% else %}
-<td style="text-align: center;">{{ sql_type_bind }}</td><td style="text-align: center;">{{ sql_type_ingest }}</td>
+<td style="text-align: center;">
+
+{{ sql_type_bind }}
+
+</td>
+<td style="text-align: center;">
+
+{{ sql_type_ingest }}
+
+</td>
 {% endif %}
 </tr>
 {%- endfor %}
