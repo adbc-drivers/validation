@@ -115,7 +115,11 @@ class TestIngest:
                     raise
 
             with setup_statement(query, cursor):
-                cursor.adbc_ingest(table_name, data, mode="create")
+                modified = cursor.adbc_ingest(table_name, data, mode="create")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data)
+                else:
+                    assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -158,8 +162,17 @@ class TestIngest:
                 # Some databases have no way to do DROP IF EXISTS
                 if not driver.is_table_not_found(table_name=table_name, error=e):
                     raise
-            cursor.adbc_ingest(table_name, data, mode="create")
-            cursor.adbc_ingest(table_name, data2, mode="append")
+            modified = cursor.adbc_ingest(table_name, data, mode="create")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data)
+            else:
+                assert modified == -1
+
+            modified = cursor.adbc_ingest(table_name, data2, mode="append")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data2)
+            else:
+                assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -234,8 +247,17 @@ class TestIngest:
                 # Some databases have no way to do DROP IF EXISTS
                 if not driver.is_table_not_found(table_name=table_name, error=e):
                     raise
-            cursor.adbc_ingest(table_name, data, mode="create_append")
-            cursor.adbc_ingest(table_name, data2, mode="create_append")
+            modified = cursor.adbc_ingest(table_name, data, mode="create_append")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data)
+            else:
+                assert modified == -1
+
+            modified = cursor.adbc_ingest(table_name, data2, mode="create_append")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data2)
+            else:
+                assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -280,10 +302,20 @@ class TestIngest:
                 if not driver.is_table_not_found(table_name=table_name, error=e):
                     raise
             cursor.adbc_ingest(table_name, data, mode="replace")
+            modified = cursor.adbc_ingest(table_name, data, mode="replace")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data)
+            else:
+                assert modified == -1
+
             if driver.name == "bigquery":
                 # BigQuery rate-limits metadata operations
                 time.sleep(5)
-            cursor.adbc_ingest(table_name, data2, mode="replace")
+            modified = cursor.adbc_ingest(table_name, data2, mode="replace")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data2)
+            else:
+                assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -316,7 +348,11 @@ class TestIngest:
                 # Some databases have no way to do DROP IF EXISTS
                 if not driver.is_table_not_found(table_name=table_name, error=e):
                     raise
-            cursor.adbc_ingest(table_name, data, mode="replace")
+            modified = cursor.adbc_ingest(table_name, data, mode="replace")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data)
+            else:
+                assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")

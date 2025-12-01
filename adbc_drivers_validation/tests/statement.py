@@ -144,3 +144,61 @@ class TestStatement:
 
         conn.adbc_connection.set_options(**{"adbc.connection.autocommit": True})
         assert conn.adbc_connection.get_option("adbc.connection.autocommit") == "true"
+
+    def test_rows_affected(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        table_name = "test_rows_affected"
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(
+                driver.drop_table(table_name="test_rows_affected")
+            )
+            try:
+                cursor.adbc_statement.execute_update()
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
+
+            cursor.adbc_statement.set_sql_query(f"CREATE TABLE {table_name} (id INT)")
+            rows_affected = cursor.adbc_statement.execute_update()
+
+            if driver.features.statement_rows_affected:
+                assert rows_affected == 0
+            else:
+                assert rows_affected == -1
+
+            cursor.adbc_statement.set_sql_query(
+                f"INSERT INTO {table_name} (id) VALUES (1)"
+            )
+            rows_affected = cursor.adbc_statement.execute_update()
+            if driver.features.statement_rows_affected:
+                assert rows_affected == 1
+            else:
+                assert rows_affected == -1
+
+            cursor.adbc_statement.set_sql_query(f"UPDATE {table_name} SET id = id + 1")
+            rows_affected = cursor.adbc_statement.execute_update()
+            if driver.features.statement_rows_affected:
+                assert rows_affected == 1
+            else:
+                assert rows_affected == -1
+
+            cursor.adbc_statement.set_sql_query(f"DELETE FROM {table_name}")
+            rows_affected = cursor.adbc_statement.execute_update()
+            if driver.features.statement_rows_affected:
+                assert rows_affected == 1
+            else:
+                assert rows_affected == -1
+
+            cursor.adbc_statement.set_sql_query(
+                driver.drop_table(table_name="test_rows_affected")
+            )
+            try:
+                cursor.adbc_statement.execute_update()
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
