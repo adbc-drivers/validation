@@ -1,0 +1,10 @@
+{
+    "format": "+s",
+    "children": [
+        {
+            "name": "res",
+            "format": "tsm:",
+            "flags": ["nullable"]
+        }
+    ]
+}

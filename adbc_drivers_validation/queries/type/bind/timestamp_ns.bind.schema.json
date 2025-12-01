@@ -2,8 +2,13 @@
     "format": "+s",
     "children": [
         {
+            "name": "idx",
+            "format": "i",
+            "flags": []
+        },
+        {
             "name": "res",
-            "format": "tsu:",
+            "format": "tsn:",
             "flags": ["nullable"]
         }
     ]
