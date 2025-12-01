@@ -1,0 +1,55 @@
+<!--
+  Copyright (c) 2025 ADBC Drivers Contributors
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Architecture Overview
+
+### Project Structure
+
+- `adbc_drivers_validation/`: Main package source code
+  - `model.py`: Core data models for queries, drivers, and test case configuration
+  - `quirks.py`: Driver-specific quirks and SQL dialect handling
+  - `compare.py`: Comparison utilities for test results
+  - `arrowjson.py`: Utilities for working with Arrow schemas and tables in JSON format
+  - `tests/`: Test framework modules
+    - `conftest.py`: Pytest configuration and common fixtures
+    - `query.py`: Tests for running SQL queries
+    - `ingest.py`: Tests for bulk data ingestion
+    - `statement.py`: Tests for statement handling
+    - `connection.py`: Tests for connection handling
+  - `queries/`: Contains test case definitions
+    - `type/literal/`: Tests for literal values
+    - `type/select/`: Tests for selecting values from tables
+    - `type/bind/`: Tests for binding parameters
+    - `ingest/`: Tests for bulk data ingestion
+  - `templates/`: Templates for documentation generation
+
+### Key Concepts
+
+1. **Query Test Cases**: Each test case consists of multiple files with the same base name:
+   - `.sql`: The query to execute
+   - `.schema.json`: The expected schema of the result
+   - `.json`: The expected data result
+   - `.setup.sql`: Optional setup SQL to run before the main query
+   - `.bind.sql`: Optional query to execute with parameters
+   - `.bind.schema.json`: Schema of the bind parameters
+   - `.bind.json`: Data for the bind parameters
+   - `.toml`: Metadata about the test case (tags, skip conditions, etc.)
+
+   Read README.md to learn more.

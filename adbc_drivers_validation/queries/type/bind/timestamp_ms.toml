@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-sort-keys = [["res", "ascending"]]
-
 [setup]
-drop = "test_timestamptz"
+drop = "test_timestamp"
 
 [tags]
-sql-type-name = "TIMESTAMP WITH TIME ZONE"
+sql-type-name = "TIMESTAMP"
