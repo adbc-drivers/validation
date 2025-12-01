@@ -1,4 +1,4 @@
 CREATE TABLE test_timestamp (
     idx INT,
-    res TIMESTAMP
+    res TIMESTAMP(3)
 );

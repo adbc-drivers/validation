@@ -121,15 +121,14 @@ def scalar_to_py_smart(value: pyarrow.Scalar) -> typing.Any:
     elif isinstance(value, pyarrow.TimestampScalar):
         match value.type.unit:
             case "s":
-                nanos = value.value * 1_000_000_000
+                instant = whenever.Instant.from_timestamp(value.value)
             case "ms":
-                nanos = value.value * 1_000_000
+                instant = whenever.Instant.from_timestamp_millis(value.value)
             case "us":
-                nanos = value.value * 1000
+                instant = whenever.Instant.from_timestamp_nanos(value.value * 1000)
             case "ns":
-                nanos = value.value
+                instant = whenever.Instant.from_timestamp_nanos(value.value)
 
-        instant = whenever.Instant.from_timestamp_nanos(nanos)
         if value.type.tz is None or value.type.tz == "":
             # A bit sketch
             naive = whenever.PlainDateTime.parse_iso(instant.format_iso()[:-1])
