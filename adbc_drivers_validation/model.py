@@ -27,10 +27,15 @@ import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
-from . import arrowjson, utils
+from . import arrowjson, txtcase, utils
 
 ROOT = Path(__file__).parent
 DRIVER_EXTENSION = {"Windows": "dll", "Darwin": "dylib"}.get(platform.system(), "so")
+
+
+@functools.cache
+def query_txtcase(path: Path) -> txtcase.TxtCase | None:
+    return txtcase.try_load(path)
 
 
 @functools.cache
@@ -55,6 +60,18 @@ def query_schema(path: Path) -> pyarrow.Schema:
 def query_table(path: Path, schema: pyarrow.Schema) -> pyarrow.Table:
     with path.open("r") as f:
         return arrowjson.load_table(f, schema)
+
+
+def try_txtcase(path: Path, fallback, parts: list[str], schema=None):
+    args = (schema,) if schema is not None else ()
+    t = query_txtcase(path)
+    if t is None:
+        return fallback(path, *args)
+
+    for part in parts:
+        if (p := t.get_part(part, *args)) is not None:
+            return p
+    raise ValueError(f"{path} does not contain any of {parts}")
 
 
 @dataclasses.dataclass
@@ -275,18 +292,25 @@ class IngestQuery:
     expected_schema_path: Path | None = None
     expected_path: Path | None = None
 
-    def input_schema(self) -> str:
-        return query_schema(self.input_schema_path)
+    def input_schema(self) -> pyarrow.Schema:
+        return try_txtcase(self.input_schema_path, query_schema, ["input_schema"])
 
     def input(self) -> pyarrow.Table:
-        return query_table(self.input_path, self.input_schema())
+        return try_txtcase(self.input_path, query_table, ["input"], self.input_schema())
 
-    def expected_schema(self) -> str:
-        return query_schema(self.expected_schema_path or self.input_schema_path)
+    def expected_schema(self) -> pyarrow.Schema:
+        return try_txtcase(
+            self.expected_schema_path or self.input_schema_path,
+            query_schema,
+            ["expected_schema", "input_schema"],
+        )
 
     def expected(self) -> pyarrow.Table:
-        return query_table(
-            self.expected_path or self.input_path, self.expected_schema()
+        return try_txtcase(
+            self.expected_path or self.input_path,
+            query_table,
+            ["expected", "input"],
+            self.expected_schema(),
         )
 
 
@@ -310,13 +334,14 @@ class SelectQuery:
     def setup_query(self) -> str | None:
         if not self.setup_query_path:
             return None
-        return query(self.setup_query_path)
+        return try_txtcase(self.setup_query_path, query, ["setup_query"])
 
     def bind_query(self, driver: DriverQuirks) -> str:
         if not self.bind_query_path:
             return None
 
-        raw_query = query(self.bind_query_path)
+        raw_query = try_txtcase(self.bind_query_path, query, ["bind_query"])
+
         param = re.compile(r"\$(\d+)")
         # Replace bind parameters with driver-specific syntax
 
@@ -327,23 +352,25 @@ class SelectQuery:
         return param.sub(repl, raw_query)
 
     def query(self) -> str:
-        return query(self.query_path)
+        return try_txtcase(self.query_path, query, ["query"])
 
     def expected_schema(self) -> pyarrow.Schema:
-        return query_schema(self.expected_schema_path)
+        return try_txtcase(self.expected_schema_path, query_schema, ["expected_schema"])
 
     def expected_result(self) -> pyarrow.Table:
-        return query_table(self.expected_path, self.expected_schema())
+        return try_txtcase(
+            self.expected_path, query_table, ["expected"], self.expected_schema()
+        )
 
     def bind_schema(self) -> pyarrow.Schema:
         if not self.bind_schema_path:
             return None
-        return query_schema(self.bind_schema_path)
+        return try_txtcase(self.bind_schema_path, query_schema, ["bind_schema"])
 
     def bind_data(self) -> pyarrow.Table:
         if not self.bind_path:
             return None
-        return query_table(self.bind_path, self.bind_schema())
+        return try_txtcase(self.bind_path, query_table, ["bind"], self.bind_schema())
 
 
 @dataclasses.dataclass
@@ -356,7 +383,7 @@ class Query:
     def metadata(self) -> dict[str, typing.Any]:
         md = {}
         for metadata_path in reversed(self.metadata_paths or []):
-            m = query_meta(metadata_path)
+            m = try_txtcase(metadata_path, query_meta, ["metadata"])
             utils.merge_into(md, m)
         return md
 
@@ -472,6 +499,7 @@ class QuerySet:
             root.rglob("*.sql"),
             root.rglob("*.json"),
             root.rglob("*.toml"),
+            root.rglob("*.txtcase"),
         )
         files = sorted(files, key=lambda path: (case_name(path), path))
         files = itertools.groupby(files, key=case_name)
@@ -482,37 +510,46 @@ class QuerySet:
             if parent:
                 parent_query = parent.queries.get(query_case)
 
+            query_files = list(query_files)
             params = {}
-            metadata_path: Path | None = None
-            for query_file in query_files:
-                if query_file.suffixes == [".sql"]:
-                    params["query_path"] = query_file
-                elif query_file.suffixes == [".bind", ".sql"]:
-                    params["bind_query_path"] = query_file
-                elif query_file.suffixes == [".schema", ".json"]:
-                    params["expected_schema_path"] = query_file
-                elif query_file.suffixes == [".json"]:
-                    params["expected_path"] = query_file
-                elif query_file.suffixes == [".input", ".json"]:
-                    params["input_path"] = query_file
-                elif query_file.suffixes == [".input", ".schema", ".json"]:
-                    params["input_schema_path"] = query_file
-                elif query_file.suffixes == [".bind", ".json"]:
-                    params["bind_path"] = query_file
-                elif query_file.suffixes == [".bind", ".schema", ".json"]:
-                    params["bind_schema_path"] = query_file
-                elif query_file.suffixes == [".setup", ".sql"]:
-                    params["setup_query_path"] = query_file
-                elif query_file.suffixes == [".toml"]:
-                    metadata_path = query_file
-                else:
-                    raise ValueError(
-                        f"{query_case}: unexpected query file: {query_file}"
-                    )
+
+            if len(query_files) == 1 and query_files[0].suffixes == [".txtcase"]:
+                t = query_txtcase(query_files[0])
+                for part in t.parts:
+                    params[f"{part}_path"] = query_files[0]
+            else:
+                for query_file in query_files:
+                    if query_file.suffixes == [".sql"]:
+                        params["query_path"] = query_file
+                    elif query_file.suffixes == [".bind", ".sql"]:
+                        params["bind_query_path"] = query_file
+                    elif query_file.suffixes == [".schema", ".json"]:
+                        params["expected_schema_path"] = query_file
+                    elif query_file.suffixes == [".json"]:
+                        params["expected_path"] = query_file
+                    elif query_file.suffixes == [".input", ".json"]:
+                        params["input_path"] = query_file
+                    elif query_file.suffixes == [".input", ".schema", ".json"]:
+                        params["input_schema_path"] = query_file
+                    elif query_file.suffixes == [".bind", ".json"]:
+                        params["bind_path"] = query_file
+                    elif query_file.suffixes == [".bind", ".schema", ".json"]:
+                        params["bind_schema_path"] = query_file
+                    elif query_file.suffixes == [".setup", ".sql"]:
+                        params["setup_query_path"] = query_file
+                    elif query_file.suffixes == [".toml"]:
+                        params["metadata_path"] = query_file
+                    elif query_file.suffixes == [".txtcase"]:
+                        raise ValueError(
+                            f"{query_case}: cannot mix .txtcase in with other files in the same directory: {query_file}"
+                        )
+                    else:
+                        raise ValueError(
+                            f"{query_case}: unexpected query file: {query_file}"
+                        )
             query = Query.merge(
                 name=query_case,
                 parent=parent_query,
-                metadata_path=metadata_path,
                 **params,
             )
 

@@ -52,4 +52,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - `.bind.json`: Data for the bind parameters
    - `.toml`: Metadata about the test case (tags, skip conditions, etc.)
 
+   Alternatively, these files can be consolidated into a single `.txtcase` file.  Inside the file, a `// part: ` comment is needed before the file contents to identify the data.  For example, instead of having a `int64.toml`, `int64.sql`, `int64.json`, and `int64.schema.json`, you would have a `int64.txtcase` file:
+
+   ```
+   // part: metadata
+   toml contents
+
+   // part: query
+   SELECT CAST(1 AS BIGINT)
+
+   // part: expected_schema
+   schema JSON
+
+   // part: expected
+   {"res": 1}
+   ```
+
    Read README.md to learn more.

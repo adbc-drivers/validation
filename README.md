@@ -100,3 +100,12 @@ case.  These can be added under a directory specified by the driver quirks.
 Instead of duplicating the full test case, as long as a file is present at the
 same relative path, it will be used to override that specific part of that
 test case for that driver.
+
+#### `.txtcase` Test Format
+
+Instead of creating separate files, a single file with the extension
+`.txtcase` can be created instead.  This file uses `//` as comment syntax.
+Each file above can be placed in the `.txtcase` file with a `// part: query`
+comment indicating which file it is meant to represent.  Overriding files
+works normally; however you cannot mix `.txtcase` with other files for the
+same query inside the same directory.
