@@ -106,6 +106,21 @@ test case for that driver.
 Instead of creating separate files, a single file with the extension
 `.txtcase` can be created instead.  This file uses `//` as comment syntax.
 Each file above can be placed in the `.txtcase` file with a `// part: query`
-comment indicating which file it is meant to represent.  Overriding files
-works normally; however you cannot mix `.txtcase` with other files for the
-same query inside the same directory.
+comment indicating which file it is meant to represent.  The comment should
+use the following text based on the original file extension:
+
+| file | `// part: ` |
+|-|-|
+| `.toml` | `metadata` |
+| `.setup.sql` | `setup_query` |
+| `.bind.sql` | `bind_query` |
+| `.bind.schema.json` | `bind_schema` |
+| `.bind.json` | `bind` |
+| `.sql` | `query` |
+| `.schema.json` | `expected_schema` |
+| `.json` | `expected` |
+
+Overriding files works normally.  You cannot mix `.txtcase` with other files
+for the same query inside the same directory, however, as the framework will
+error during test discovery (it would potentially be ambiguous which overload
+to use).
