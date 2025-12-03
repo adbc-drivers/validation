@@ -1,0 +1,27 @@
+{
+  "name": "txtcase-syntax",
+  "displayName": "TxtCase Syntax Highlighting",
+  "description": "Syntax highlighting for .txtcase files",
+  "version": "0.0.1",
+  "publisher": "adbc-drivers",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "txtcase",
+        "extensions": [".txtcase"],
+        "aliases": ["TxtCase"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "txtcase",
+        "scopeName": "source.txtcase",
+        "path": "./txtcase.tmLanguage.json"
+      }
+    ]
+  }
+}

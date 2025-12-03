@@ -46,3 +46,13 @@ repos:
   rev: 19b7466f3177cf978db8c7a444f8710bd850e66c
   hooks:
   - id: rat
+
+# grammars/txtcase.tmLanguage.json is the authoritative copy
+- repo: local
+  hooks:
+  - id: check-txtcase-grammar-in-sync
+    name: Check txtcase grammar is synced
+    entry: cmp grammars/txtcase.tmLanguage.json editors/vscode/txtcase/txtcase.tmLanguage.json
+    language: system
+    files: ^(grammars|editors/vscode/txtcase)/txtcase\.tmLanguage\.json$
+    pass_filenames: false
