@@ -1,0 +1,123 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "TxtCase",
+  "scopeName": "source.txtcase",
+  "fileTypes": [
+    "txtcase"
+  ],
+  "patterns": [
+    {
+      "include": "#txtcase-comment"
+    },
+    {
+      "include": "#metadata-section"
+    },
+    {
+      "include": "#sql-sections"
+    },
+    {
+      "include": "#arrow-schema-json-sections"
+    },
+    {
+      "include": "#jsonlines-sections"
+    }
+  ],
+  "repository": {
+    "txtcase-comment": {
+      "match": "^//(?!\\s*part:).*$\\n?",
+      "name": "comment.line.double-slash.txtcase"
+    },
+    "metadata-section": {
+      "begin": "^(//\\s*)(part:)\\s+(metadata)\\s*$",
+      "end": "^(?=//\\s*part:)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.comment.txtcase"
+        },
+        "2": {
+          "name": "keyword.control.part.txtcase"
+        },
+        "3": {
+          "name": "entity.name.section.metadata.txtcase"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.toml"
+        }
+      ]
+    },
+    "sql-sections": {
+      "patterns": [
+        {
+          "begin": "^(//\\s*)(part:)\\s+(query|setup_query|bind_query)\\s*$",
+          "end": "^(?=//\\s*part:)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.comment.txtcase"
+            },
+            "2": {
+              "name": "keyword.control.part.txtcase"
+            },
+            "3": {
+              "name": "entity.name.section.sql.txtcase"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.sql"
+            }
+          ]
+        }
+      ]
+    },
+    "arrow-schema-json-sections": {
+      "patterns": [
+        {
+          "begin": "^(//\\s*)(part:)\\s+(bind_schema|expected_schema|input_schema)\\s*$",
+          "end": "^(?=//\\s*part:)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.comment.txtcase"
+            },
+            "2": {
+              "name": "keyword.control.part.txtcase"
+            },
+            "3": {
+              "name": "entity.name.section.schema.txtcase"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.json"
+            }
+          ]
+        }
+      ]
+    },
+    "jsonlines-sections": {
+      "patterns": [
+        {
+          "begin": "^(//\\s*)(part:)\\s+(bind|expected|input)\\s*$",
+          "end": "^(?=//\\s*part:)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.comment.txtcase"
+            },
+            "2": {
+              "name": "keyword.control.part.txtcase"
+            },
+            "3": {
+              "name": "entity.name.section.data.txtcase"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.json"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
