@@ -26,11 +26,19 @@ def split_statement(statement: str) -> list[str]:
 
     statements = []
     current = []
+
+    def flush():
+        nonlocal statements
+        nonlocal current
+        v = "\n".join(current).strip()
+        if v:
+            statements.append(v)
+        current = []
+
     for line in statement.split("\n"):
         current.append(line)
         if line.strip().endswith(";"):
-            statements.append("\n".join(current))
-            current = []
+            flush()
     if current:
-        statements.append("\n".join(current))
+        flush()
     return statements
