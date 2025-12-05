@@ -179,14 +179,18 @@ class TestStatement:
             else:
                 assert rows_affected == -1
 
-            cursor.adbc_statement.set_sql_query(f"UPDATE {table_name} SET id = id + 1")
+            cursor.adbc_statement.set_sql_query(
+                f"UPDATE {table_name} SET id = id + 1 WHERE id = 1"
+            )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
                 assert rows_affected == 1
             else:
                 assert rows_affected == -1
 
-            cursor.adbc_statement.set_sql_query(f"DELETE FROM {table_name}")
+            cursor.adbc_statement.set_sql_query(
+                f"DELETE FROM {table_name} WHERE id = 2"
+            )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
                 assert rows_affected == 1
