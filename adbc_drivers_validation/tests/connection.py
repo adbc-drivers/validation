@@ -20,6 +20,7 @@ pytest_generate_tests hook, call generate_tests.
 """
 
 import re
+import secrets
 import typing
 
 import adbc_driver_manager.dbapi
@@ -664,7 +665,9 @@ class TestConnection:
         conn: adbc_driver_manager.dbapi.Connection,
     ):
         with conn.cursor() as cursor:
-            table_name = "getobjectstest"
+            # XXX: randomize table name since in some environments, there may
+            # be leftover tables from other runs in different schemas
+            table_name = f"getobjects{secrets.token_hex(8)}"
             schema = pyarrow.schema(
                 [
                     ("ints", pyarrow.int32()),
