@@ -69,8 +69,10 @@ def try_txtcase(path: Path, fallback, parts: list[str], schema=None):
         return fallback(path, *args)
 
     for part in parts:
-        if (p := t.get_part(part, *args)) is not None:
-            return p
+        try:
+            return t.get_part(part, *args)
+        except KeyError:
+            continue
     raise ValueError(f"{path} does not contain any of {parts}")
 
 
@@ -341,6 +343,7 @@ class SelectQuery:
             return None
 
         raw_query = try_txtcase(self.bind_query_path, query, ["bind_query"])
+        raw_query = raw_query.strip()
 
         param = re.compile(r"\$(\d+)")
         # Replace bind parameters with driver-specific syntax
@@ -352,7 +355,7 @@ class SelectQuery:
         return param.sub(repl, raw_query)
 
     def query(self) -> str:
-        return try_txtcase(self.query_path, query, ["query"])
+        return try_txtcase(self.query_path, query, ["query"]).strip()
 
     def expected_schema(self) -> pyarrow.Schema:
         return try_txtcase(self.expected_schema_path, query_schema, ["expected_schema"])
