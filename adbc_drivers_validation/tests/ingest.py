@@ -121,9 +121,10 @@ class TestIngest:
                 else:
                     assert modified == -1
 
-        idx = driver.quote_identifier("idx")
-        value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        fields = []
+        for field in data.schema:
+            fields.append(driver.quote_identifier(field.name))
+        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
         with conn.cursor() as cursor:
             with setup_statement(query, cursor):
                 cursor.adbc_statement.set_sql_query(select)
