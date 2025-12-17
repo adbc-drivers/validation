@@ -24,8 +24,8 @@ sql-type-name = "TIMESTAMP WITH TIME ZONE"
 
 CREATE TABLE test_timestamptz (
     idx INT,
-    res TIMESTAMP(6) WITH TIME ZONE,
-    res2 TIMESTAMP(6) WITH TIME ZONE
+    res TIMESTAMP(3) WITH TIME ZONE,
+    res2 TIMESTAMP(3) WITH TIME ZONE
 );
 
 // part: bind_query
@@ -44,12 +44,12 @@ INSERT INTO test_timestamptz VALUES ($1, $2, $3)
         },
         {
             "name": "res",
-            "format": "tsu:UTC",
+            "format": "tsm:UTC",
             "flags": ["nullable"]
         },
         {
             "name": "res2",
-            "format": "tsu:Asia/Tokyo",
+            "format": "tsm:Asia/Tokyo",
             "flags": ["nullable"]
         }
     ]
@@ -57,10 +57,10 @@ INSERT INTO test_timestamptz VALUES ($1, $2, $3)
 
 // part: bind
 
-{"idx": 3, "res": 1684158330000000, "res2": 1684158330000000}
-{"idx": 2, "res": 946684800000000, "res2": 946684800000000}
-{"idx": 1, "res": -14182940000000, "res2": -14182940000000}
-{"idx": 4, "res": 253402300799999999, "res2": 253402300799999999}
+{"idx": 3, "res": 1684158330000, "res2": 1684158330000}
+{"idx": 2, "res": 946684800000, "res2": 946684800000}
+{"idx": 1, "res": -14182940000, "res2": -14182940000}
+{"idx": 4, "res": 253402300799999, "res2": 253402300799999}
 {"idx": 0, "res": null, "res2": null}
 
 // part: query
@@ -74,12 +74,12 @@ SELECT res, res2 FROM test_timestamptz ORDER BY idx
     "children": [
         {
             "name": "res",
-            "format": "tsu:UTC",
+            "format": "tsm:UTC",
             "flags": ["nullable"]
         },
         {
             "name": "res2",
-            "format": "tsu:UTC",
+            "format": "tsm:UTC",
             "flags": ["nullable"]
         }
     ]
@@ -88,7 +88,7 @@ SELECT res, res2 FROM test_timestamptz ORDER BY idx
 // part: expected
 
 {"res": null, "res2": null}
-{"res": -14182940000000, "res2": -14182940000000}
-{"res": 946684800000000, "res2": 946684800000000}
-{"res": 1684158330000000, "res2": 1684158330000000}
-{"res": 253402300799999999, "res2": 253402300799999999}
+{"res": -14182940000, "res2": -14182940000}
+{"res": 946684800000, "res2": 946684800000}
+{"res": 1684158330000, "res2": 1684158330000}
+{"res": 253402300799999, "res2": 253402300799999}
