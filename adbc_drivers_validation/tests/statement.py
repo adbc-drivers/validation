@@ -165,7 +165,10 @@ class TestStatement:
             cursor.adbc_statement.set_sql_query(f"CREATE TABLE {table_name} (id INT)")
             rows_affected = cursor.adbc_statement.execute_update()
 
-            if driver.features.statement_rows_affected:
+            if (
+                driver.features.statement_rows_affected
+                and driver.features.statement_rows_affected_ddl
+            ):
                 assert rows_affected == 0
             else:
                 assert rows_affected == -1

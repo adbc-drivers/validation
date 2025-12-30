@@ -113,6 +113,7 @@ class DriverFeatures:
     statement_get_parameter_schema: bool = False
     statement_prepare: bool = True
     statement_rows_affected: bool = False
+    statement_rows_affected_ddl: bool = True
     _current_catalog: str | FromEnv | None = None
     _current_schema: str | FromEnv | None = None
     _secondary_schema: str | FromEnv | None = None
