@@ -16,13 +16,40 @@
 Driver-specific functionality needed for testing.
 """
 
+import sqlglot
 
-def split_statement(statement: str) -> list[str]:
+
+def split_statement(statement: str, dialect: str | None = None) -> list[str]:
     """
     Split a SQL statement into individual statements.
 
     Some vendors can't handle multiple queries in a single statement.
+
+    Args:
+        statement: The SQL statement(s) to split.
+        dialect: Optional SQL dialect for parsing (e.g., "databricks", "postgres", "mysql").
+                 If provided, uses sqlglot for robust parsing. If not, uses simple line-based splitting.
+
+    Returns:
+        List of individual SQL statements.
     """
+    if dialect is not None:
+        try:
+            parsed = sqlglot.parse(statement, dialect=dialect)
+            # Filter out None/empty, comment-only statements, and strip trailing semicolons
+            statements = []
+            for stmt in parsed:
+                if not stmt:
+                    continue
+                stmt_str = stmt.sql(dialect=dialect, pretty=False).rstrip(";").strip()
+                # Skip if it's a comment-only statement (starts with /* or --)
+                if stmt_str.startswith("/*") or stmt_str.startswith("--"):
+                    continue
+                if stmt_str:
+                    statements.append(stmt_str)
+            return statements if statements else [statement]
+        except Exception:
+            pass
 
     statements = []
     current = []
