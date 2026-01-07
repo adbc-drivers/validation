@@ -24,6 +24,7 @@ dependencies = [
   "jinja2>=3.1.6,<4",
   "pyarrow>=22.0.0,<23",
   "pytest>=9.0.0,<10",
+  "sqlglot>=28.5.0",
   "whenever>=0.9.3,<0.10",
 ]
 
