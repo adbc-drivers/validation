@@ -18,7 +18,7 @@
 drop = "test_timestamptz"
 
 [tags]
-sql-type-name = "TIMESTAMP WITH TIME ZONE"
+sql-type-name = "TIMESTAMP(6) WITH TIME ZONE"
 
 // part: setup_query
 

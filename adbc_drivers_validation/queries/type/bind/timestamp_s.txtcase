@@ -18,7 +18,7 @@
 drop = "test_timestamp"
 
 [tags]
-sql-type-name = "TIMESTAMP"
+sql-type-name = "TIMESTAMP(0)"
 
 // part: setup_query
 
