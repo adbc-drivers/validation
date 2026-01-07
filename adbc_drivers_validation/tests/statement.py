@@ -162,7 +162,8 @@ class TestStatement:
                 if not driver.is_table_not_found(table_name=table_name, error=e):
                     raise
 
-            cursor.adbc_statement.set_sql_query(f"CREATE TABLE {table_name} (id INT)")
+            quoted_name = driver.quote_identifier(table_name)
+            cursor.adbc_statement.set_sql_query(f"CREATE TABLE {quoted_name} (id INT)")
             rows_affected = cursor.adbc_statement.execute_update()
 
             if (
@@ -174,7 +175,7 @@ class TestStatement:
                 assert rows_affected == -1
 
             cursor.adbc_statement.set_sql_query(
-                f"INSERT INTO {table_name} (id) VALUES (1)"
+                f"INSERT INTO {quoted_name} (id) VALUES (1)"
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
@@ -183,7 +184,7 @@ class TestStatement:
                 assert rows_affected == -1
 
             cursor.adbc_statement.set_sql_query(
-                f"UPDATE {table_name} SET id = id + 1 WHERE id = 1"
+                f"UPDATE {quoted_name} SET id = id + 1 WHERE id = 1"
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
@@ -192,7 +193,7 @@ class TestStatement:
                 assert rows_affected == -1
 
             cursor.adbc_statement.set_sql_query(
-                f"DELETE FROM {table_name} WHERE id = 2"
+                f"DELETE FROM {quoted_name} WHERE id = 2"
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
