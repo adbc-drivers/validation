@@ -228,8 +228,14 @@ def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
         return f"extension<{ext.decode('utf-8')}>"
     if show_type_parameters:
         return str(arrow_type)
+    elif isinstance(arrow_type, pyarrow.Decimal32Type):
+        return "decimal32"
+    elif isinstance(arrow_type, pyarrow.Decimal64Type):
+        return "decimal64"
     elif isinstance(arrow_type, pyarrow.Decimal128Type):
         return "decimal128"
+    elif isinstance(arrow_type, pyarrow.Decimal256Type):
+        return "decimal256"
     elif isinstance(arrow_type, pyarrow.FixedSizeBinaryType):
         return "fixed_size_binary"
     elif isinstance(arrow_type, pyarrow.FixedSizeListType):
@@ -238,6 +244,10 @@ def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
         return "list"
     elif isinstance(arrow_type, pyarrow.StructType):
         return "struct"
+    elif isinstance(arrow_type, pyarrow.TimestampType):
+        if arrow_type.tz:
+            return f"timestamp[{arrow_type.unit}] (with time zone)"
+        return str(arrow_type)
     return str(arrow_type)
 
 
