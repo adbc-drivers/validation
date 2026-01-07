@@ -320,6 +320,36 @@ def load_testcases(
         else:
             test_result = "passed"
 
+        arrow_type = None
+        if query_name:
+            query = query_set.queries[query_name]
+            show_type_parameters = tags.get("show-arrow-type-parameters", False)
+            if query_name.startswith("type/bind/"):
+                bind_schema = query.query.bind_schema()
+                field = bind_schema[-1]
+                arrow_type = arrow_type_name(
+                    field.type,
+                    field.metadata,
+                    show_type_parameters=show_type_parameters,
+                )
+            elif name == "test_query":
+                # Take the first field; some queries may select additional things
+                # like nested types to test how a type behaves in different
+                # contexts
+                field = query.query.expected_schema()[0]
+                arrow_type = arrow_type_name(
+                    field.type,
+                    field.metadata,
+                    show_type_parameters=show_type_parameters,
+                )
+            elif module.endswith("TestIngest") and name == "test_create":
+                field = query.query.input_schema()[1]
+                arrow_type = arrow_type_name(
+                    field.type,
+                    field.metadata,
+                    show_type_parameters=show_type_parameters,
+                )
+
         testcases.append(
             {
                 "test_module": module,
@@ -328,6 +358,7 @@ def load_testcases(
                 "driver": driver,
                 "vendor_version": version,
                 "query_name": query_name,
+                "arrow_type_name": arrow_type,
                 "tags": json.dumps(tags),
                 "properties": json.dumps(properties),
             }
@@ -341,6 +372,7 @@ def load_testcases(
             pyarrow.field("driver", pyarrow.string()),
             pyarrow.field("vendor_version", pyarrow.string()),
             pyarrow.field("query_name", pyarrow.string()),
+            pyarrow.field("arrow_type_name", pyarrow.string()),
             # Actually JSON
             pyarrow.field("tags", pyarrow.string()),
             pyarrow.field("properties", pyarrow.string()),
@@ -358,6 +390,7 @@ def load_testcases(
               driver STRING,
               vendor_version STRING,
               query_name STRING,
+              arrow_type_name STRING,
               tags JSON,
               properties JSON,
         );
@@ -369,6 +402,7 @@ def load_testcases(
           driver,
           vendor_version,
           query_name,
+          arrow_type_name,
           CAST(tags AS JSON) AS tags,
           CAST(properties AS JSON) AS properties,
         FROM testcases_raw
@@ -566,6 +600,7 @@ def generate_includes(
         FROM testcases
         SELECT
           vendor_version,
+          arrow_type_name,
           tags->>'sql-type-name' AS sql_type,
           ARRAY_AGG(test_result ORDER BY query_name ASC) AS test_results,
           ARRAY_AGG(query_name ORDER BY query_name ASC) AS query_names,
@@ -574,8 +609,8 @@ def generate_includes(
           test_name = 'test_query'
           AND query_name LIKE 'type/bind/%'
           AND (tags->>'sql-type-name') IS NOT NULL
-        GROUP BY vendor_version, tags->>'sql-type-name'
-        ORDER BY vendor_version, tags->>'sql-type-name'
+        GROUP BY vendor_version, arrow_type_name, tags->>'sql-type-name'
+        ORDER BY vendor_version, arrow_type_name, tags->>'sql-type-name'
         """)
         .arrow()
         .read_all()
@@ -589,15 +624,14 @@ def generate_includes(
             field = bind_schema[-1]
             arrow_type_names.add(arrow_type_name(field.type, field.metadata))
         sql_type = html.escape(test_case["sql_type"])
-        for arrow_type in arrow_type_names:
-            arrow_type = html.escape(arrow_type)
-            report.add_table_entry(
-                test_case["vendor_version"],
-                "bind",
-                arrow_type,
-                sql_type,
-                test_case,
-            )
+        arrow_type = html.escape(test_case["arrow_type_name"])
+        report.add_table_entry(
+            test_case["vendor_version"],
+            "bind",
+            arrow_type,
+            sql_type,
+            test_case,
+        )
 
     # Ingest type support
     type_tests = (
