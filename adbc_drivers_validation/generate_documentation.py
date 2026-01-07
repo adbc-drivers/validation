@@ -406,7 +406,7 @@ def render(
     bind_dict = dict(template_vars["type_bind"])
     ingest_dict = dict(template_vars["type_ingest"])
     template_vars["type_bind_ingest"] = [
-        (k, bind_dict.get(k), ingest_dict.get(k))
+        (k, bind_dict.get(k, "(not tested)"), ingest_dict.get(k, "(not tested)"))
         for k in set(bind_dict) | set(ingest_dict)
     ]
 
