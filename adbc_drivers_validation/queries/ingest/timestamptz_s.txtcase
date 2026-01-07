@@ -15,7 +15,7 @@
 // part: metadata
 
 [tags]
-sql-type-name = "TIMESTAMP WITH TIME ZONE"
+sql-type-name = "TIMESTAMP(0) WITH TIME ZONE"
 
 // part: input_schema
 

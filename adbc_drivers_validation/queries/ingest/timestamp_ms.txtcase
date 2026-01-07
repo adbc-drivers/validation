@@ -15,7 +15,7 @@
 // part: metadata
 
 [tags]
-sql-type-name = "TIMESTAMP"
+sql-type-name = "TIMESTAMP(3)"
 
 // part: input_schema
 
