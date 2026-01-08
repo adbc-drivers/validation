@@ -193,6 +193,8 @@ class ValidationReport:
             partial_support = partial_support or meta.get("partial-support", False)
             caveats.extend(meta.get("caveats", []))
 
+            if caveat := meta.get("broken-driver"):
+                caveats.append(caveat)
             if caveat := meta.get("broken-vendor"):
                 caveats.append(caveat)
 
