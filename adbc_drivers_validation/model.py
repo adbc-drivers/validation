@@ -561,6 +561,8 @@ class QuerySet:
                 query.pytest_marks.append(pytest.mark.skip(reason=skip))
 
             tags = query.metadata().get("tags", {})
+            if broken_driver := tags.get("broken-driver", False):
+                query.pytest_marks.append(pytest.mark.xfail(reason=broken_driver))
             if broken_vendor := tags.get("broken-vendor", False):
                 query.pytest_marks.append(pytest.mark.xfail(reason=broken_vendor))
 
