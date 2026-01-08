@@ -437,8 +437,21 @@ def render(
     # entirely with SQL.
     #
     # This makes a list with 3-tuple items: (arrow_type, bind_type, ingest_type)
-    bind_dict = dict(template_vars["type_bind"])
-    ingest_dict = dict(template_vars["type_ingest"])
+    bind_dict = {}
+    ingest_dict = {}
+
+    for arrow_type, sql_type in template_vars["type_bind"]:
+        if arrow_type in bind_dict:
+            bind_dict[arrow_type] += f", {sql_type}"
+        else:
+            bind_dict[arrow_type] = sql_type
+
+    for arrow_type, sql_type in template_vars["type_ingest"]:
+        if arrow_type in ingest_dict:
+            ingest_dict[arrow_type] += f", {sql_type}"
+        else:
+            ingest_dict[arrow_type] = sql_type
+
     template_vars["type_bind_ingest"] = [
         (k, bind_dict.get(k, "(not tested)"), ingest_dict.get(k, "(not tested)"))
         for k in set(bind_dict) | set(ingest_dict)
@@ -639,6 +652,7 @@ def generate_includes(
         FROM testcases
         SELECT
           vendor_version,
+          arrow_type_name,
           tags->>'sql-type-name' AS sql_type,
           test_result,
           query_name,
@@ -655,11 +669,7 @@ def generate_includes(
     )
     for test_case in type_tests:
         query_set = query_sets[test_case["vendor_version"]]
-        arrow_type = html.escape(
-            arrow_type_name(
-                query_set.queries[test_case["query_name"]].query.input_schema()[1].type
-            )
-        )
+        arrow_type = html.escape(test_case["arrow_type_name"])
         sql_type = html.escape(test_case["sql_type"])
         report.add_table_entry(
             test_case["vendor_version"],
