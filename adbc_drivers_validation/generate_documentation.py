@@ -290,6 +290,7 @@ def load_testcases(
         if "[" in name:
             name, _, _ = name.partition("[")
         failure = testcase.find("failure")
+        error = testcase.find("error")
         skipped = testcase.find("skipped")
 
         properties = {}
@@ -312,7 +313,7 @@ def load_testcases(
             metadata = query.metadata()
             tags = metadata.get("tags", {})
 
-        if failure is not None:
+        if failure is not None or error is not None:
             test_result = "failed"
         elif skipped is not None:
             if skipped.get("type") == "pytest.xfail":
