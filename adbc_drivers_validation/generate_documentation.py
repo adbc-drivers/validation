@@ -290,6 +290,7 @@ def load_testcases(
         if "[" in name:
             name, _, _ = name.partition("[")
         failure = testcase.find("failure")
+        error = testcase.find("error")
         skipped = testcase.find("skipped")
 
         properties = {}
@@ -312,7 +313,7 @@ def load_testcases(
             metadata = query.metadata()
             tags = metadata.get("tags", {})
 
-        if failure is not None:
+        if failure is not None or error is not None:
             test_result = "failed"
         elif skipped is not None:
             if skipped.get("type") == "pytest.xfail":
@@ -539,14 +540,26 @@ def generate_includes(
         .read_all()
         .to_pylist()
     )
-    driver_version = list(set(v["driver_version"] for v in version))
-    if len(driver_version) != 1:
-        raise ValueError(f"Expected one driver version, got {driver_version}")
-    report.driver_version = driver_version[0]
-    for v in version:
-        short_version = v["short_version"]
-        vendor_version = v["vendor_version"]
-        report.versions[short_version].vendor_version = vendor_version
+    if version:
+        driver_version = list(
+            set(v["driver_version"] for v in version if v["driver_version"])
+        )
+        if len(driver_version) == 0:
+            report.driver_version = "(unknown)"
+        elif len(driver_version) != 1:
+            raise ValueError(f"Expected one driver version, got {driver_version}")
+        else:
+            report.driver_version = driver_version[0]
+        for v in version:
+            short_version = v["short_version"] or "(unknown)"
+            vendor_version = v["vendor_version"] or "(unknown)"
+            if short_version in report.versions:
+                report.versions[short_version].vendor_version = vendor_version
+    else:
+        # No version info available (test_get_info didn't run or failed)
+        report.driver_version = "(unknown)"
+        for short_version in report.versions:
+            report.versions[short_version].vendor_version = "(unknown)"
 
     # Select type support
     type_tests = (
