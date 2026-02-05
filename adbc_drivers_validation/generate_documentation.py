@@ -541,7 +541,9 @@ def generate_includes(
         .to_pylist()
     )
     if version:
-        driver_version = list(set(v["driver_version"] for v in version if v["driver_version"]))
+        driver_version = list(
+            set(v["driver_version"] for v in version if v["driver_version"])
+        )
         if len(driver_version) == 0:
             report.driver_version = "(unknown)"
         elif len(driver_version) != 1:
