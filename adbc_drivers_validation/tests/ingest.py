@@ -19,6 +19,7 @@ To use: import TestIngest and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import re
 import time
 import typing
 
@@ -56,8 +57,7 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
             continue
 
         param_string = "driver,query"
-        queries = model.query_set(quirks.queries_paths)
-        for query in queries.queries.values():
+        for query in quirks.query_set.queries.values():
             marks = []
             marks.extend(query.pytest_marks)
 
@@ -87,10 +87,13 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
     )
 
 
+_SANITIZE_TABLE_NAME = re.compile(r"[^a-zA-Z0-9_]")
+
+
 def make_table_name(prefix: str, query: Query) -> str:
     # Try to avoid table based rate limits by using a unique table per case.
     suffix = query.name.rsplit("/", 1)[-1]
-    return f"{prefix}_{suffix}"
+    return _SANITIZE_TABLE_NAME.sub("_", f"{prefix}_{suffix}")
 
 
 class TestIngest:

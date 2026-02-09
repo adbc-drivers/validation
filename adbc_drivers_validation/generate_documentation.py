@@ -30,6 +30,7 @@ import jinja2
 import pyarrow
 
 from . import model
+from .utils import arrow_type_name
 
 
 @dataclasses.dataclass
@@ -224,35 +225,6 @@ class ValidationReport:
         )
 
 
-def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
-    # Special handling (sometimes we want params, sometimes not)
-    if metadata and (ext := metadata.get(b"ARROW:extension:name")):
-        return f"extension<{ext.decode('utf-8')}>"
-    if show_type_parameters:
-        return str(arrow_type)
-    elif isinstance(arrow_type, pyarrow.Decimal32Type):
-        return "decimal32"
-    elif isinstance(arrow_type, pyarrow.Decimal64Type):
-        return "decimal64"
-    elif isinstance(arrow_type, pyarrow.Decimal128Type):
-        return "decimal128"
-    elif isinstance(arrow_type, pyarrow.Decimal256Type):
-        return "decimal256"
-    elif isinstance(arrow_type, pyarrow.FixedSizeBinaryType):
-        return "fixed_size_binary"
-    elif isinstance(arrow_type, pyarrow.FixedSizeListType):
-        return "fixed_size_binary"
-    elif isinstance(arrow_type, pyarrow.ListType):
-        return "list"
-    elif isinstance(arrow_type, pyarrow.StructType):
-        return "struct"
-    elif isinstance(arrow_type, pyarrow.TimestampType):
-        if arrow_type.tz:
-            return f"timestamp[{arrow_type.unit}] (with time zone)"
-        return str(arrow_type)
-    return str(arrow_type)
-
-
 def render_to(sink: Path, template, kwargs) -> None:
     rendered = render_part(template, kwargs)
     sink.parent.mkdir(parents=True, exist_ok=True)
@@ -306,12 +278,10 @@ def load_testcases(
         query_name = properties.get("query")
         if query_name is None:
             query = None
-            metadata = {}
             tags = {}
         else:
             query = query_set.queries[query_name]
-            metadata = query.metadata()
-            tags = metadata.get("tags", {})
+            tags = query.tags
 
         if failure is not None or error is not None:
             test_result = "failed"
@@ -326,32 +296,7 @@ def load_testcases(
         arrow_type = None
         if query_name:
             query = query_set.queries[query_name]
-            show_type_parameters = tags.get("show-arrow-type-parameters", False)
-            if query_name.startswith("type/bind/"):
-                bind_schema = query.query.bind_schema()
-                field = bind_schema[-1]
-                arrow_type = arrow_type_name(
-                    field.type,
-                    field.metadata,
-                    show_type_parameters=show_type_parameters,
-                )
-            elif name == "test_query":
-                # Take the first field; some queries may select additional things
-                # like nested types to test how a type behaves in different
-                # contexts
-                field = query.query.expected_schema()[0]
-                arrow_type = arrow_type_name(
-                    field.type,
-                    field.metadata,
-                    show_type_parameters=show_type_parameters,
-                )
-            elif module.endswith("TestIngest") and name == "test_create":
-                field = query.query.input_schema()[1]
-                arrow_type = arrow_type_name(
-                    field.type,
-                    field.metadata,
-                    show_type_parameters=show_type_parameters,
-                )
+            arrow_type = query.arrow_type_name
 
         testcases.append(
             {
@@ -815,9 +760,8 @@ def generate(
 
     query_sets = {}
     for quirks in all_quirks:
-        query_set = model.query_set(quirks.queries_paths)
-        load_testcases(quirks, test_results, query_set)
-        query_sets[quirks.short_version] = query_set
+        load_testcases(quirks, test_results, quirks.query_set)
+        query_sets[quirks.short_version] = quirks.query_set
     report = generate_includes(all_quirks, query_sets)
     print(report.pprint())
     render(report, driver_template, output)

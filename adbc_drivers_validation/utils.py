@@ -17,12 +17,14 @@ import typing
 import warnings
 
 import adbc_driver_manager.dbapi
+import pyarrow
 
 if typing.TYPE_CHECKING:
     from adbc_drivers_validation.model import Query
 
 
 def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> None:
+    """Recursively merge two dictionaries."""
     for key, value in values.items():
         if isinstance(value, dict):
             if key in target:
@@ -37,6 +39,7 @@ def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> 
 
 @contextlib.contextmanager
 def scoped_trace(msg: str) -> None:
+    """If an exception is raised, add the given note to it."""
     try:
         yield
     except Exception as e:
@@ -116,3 +119,33 @@ def setup_statement(query: "Query", cursor: adbc_driver_manager.dbapi.Cursor) ->
     cursor.adbc_statement.set_options(**options)
     yield
     cursor.adbc_statement.set_options(**options_revert)
+
+
+def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
+    """Render the name of an Arrow type in a friendly way."""
+    # Special handling (sometimes we want params, sometimes not)
+    if metadata and (ext := metadata.get(b"ARROW:extension:name")):
+        return f"extension<{ext.decode('utf-8')}>"
+    if show_type_parameters:
+        return str(arrow_type)
+    elif isinstance(arrow_type, pyarrow.Decimal32Type):
+        return "decimal32"
+    elif isinstance(arrow_type, pyarrow.Decimal64Type):
+        return "decimal64"
+    elif isinstance(arrow_type, pyarrow.Decimal128Type):
+        return "decimal128"
+    elif isinstance(arrow_type, pyarrow.Decimal256Type):
+        return "decimal256"
+    elif isinstance(arrow_type, pyarrow.FixedSizeBinaryType):
+        return "fixed_size_binary"
+    elif isinstance(arrow_type, pyarrow.FixedSizeListType):
+        return "fixed_size_binary"
+    elif isinstance(arrow_type, pyarrow.ListType):
+        return "list"
+    elif isinstance(arrow_type, pyarrow.StructType):
+        return "struct"
+    elif isinstance(arrow_type, pyarrow.TimestampType):
+        if arrow_type.tz:
+            return f"timestamp[{arrow_type.unit}] (with time zone)"
+        return str(arrow_type)
+    return str(arrow_type)

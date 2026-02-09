@@ -190,6 +190,16 @@ class DriverQuirks(abc.ABC):
     @abc.abstractmethod
     def queries_paths(self) -> tuple[Path]: ...
 
+    @property
+    def query_set(self) -> "QuerySet":
+        """
+        The queries to be tested.
+
+        A validation suite may override this to customize the queries being
+        run programmatically (e.g. to generate new queries dynamically).
+        """
+        return query_set(self.queries_paths)
+
     def bind_parameter(self, index: int) -> str:
         """
         Return a bind parameter placeholder.
@@ -381,15 +391,52 @@ class SelectQuery:
 class Query:
     name: str
     query: IngestQuery | SelectQuery
-    metadata_paths: list[Path] | None = None
+    metadata_paths: list[Path | dict[str, typing.Any]] | None = None
     pytest_marks: list = dataclasses.field(default_factory=list)
 
     def metadata(self) -> dict[str, typing.Any]:
         md = {}
         for metadata_path in reversed(self.metadata_paths or []):
-            m = try_txtcase(metadata_path, query_meta, ["metadata"])
+            if isinstance(metadata_path, dict):
+                m = metadata_path
+            else:
+                m = try_txtcase(metadata_path, query_meta, ["metadata"])
             utils.merge_into(md, m)
         return md
+
+    @property
+    def tags(self) -> dict[str, typing.Any]:
+        return self.metadata().get("tags", {})
+
+    @property
+    def arrow_type_name(self) -> str:
+        """The human-friendly name of the Arrow type being tested."""
+        show_type_parameters = self.tags.get("show-arrow-type-parameters", False)
+        if isinstance(self.query, IngestQuery):
+            # first field of input schema is the row index
+            field = self.query.input_schema()[1]
+            return utils.arrow_type_name(
+                field.type, field.metadata, show_type_parameters=show_type_parameters
+            )
+        elif isinstance(self.query, SelectQuery):
+            if self.query.bind_schema() is not None:
+                field = self.query.bind_schema()[-1]
+                return utils.arrow_type_name(
+                    field.type,
+                    field.metadata,
+                    show_type_parameters=show_type_parameters,
+                )
+
+            # Take the first field; some queries may select additional things
+            # like nested types to test how a type behaves in different
+            # contexts
+            field = self.query.expected_schema()[0]
+            return utils.arrow_type_name(
+                field.type, field.metadata, show_type_parameters=show_type_parameters
+            )
+        raise ValueError(
+            f"Unknown query type, cannot get Arrow type name for {self.name}"
+        )
 
     @classmethod
     def merge(
