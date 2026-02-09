@@ -401,7 +401,6 @@ class Query:
     name: str
     query: IngestQuery | SelectQuery
     metadata_paths: list[Path | dict[str, typing.Any]] | None = None
-    pytest_marks: list = dataclasses.field(default_factory=list)
 
     def metadata(self) -> query_metadata.QueryMetadata:
         md = {}
@@ -442,6 +441,19 @@ class Query:
         raise ValueError(
             f"Unknown query type, cannot get Arrow type name for {self.name}"
         )
+
+    @property
+    def pytest_marks(self) -> list[pytest.MarkDecorator]:
+        md = self.metadata()
+        marks = []
+        if skip := md.skip:
+            marks.append(pytest.mark.skip(reason=skip))
+
+        if broken_driver := md.tags.broken_driver:
+            marks.append(pytest.mark.xfail(reason=broken_driver))
+        if broken_vendor := md.tags.broken_vendor:
+            marks.append(pytest.mark.xfail(reason=broken_vendor))
+        return marks
 
     @classmethod
     def merge(
@@ -611,16 +623,7 @@ class QuerySet:
                 **params,
             )
 
-            md = query.metadata()
-            if skip := md.skip:
-                query.pytest_marks.append(pytest.mark.skip(reason=skip))
-
-            if broken_driver := md.tags.broken_driver:
-                query.pytest_marks.append(pytest.mark.xfail(reason=broken_driver))
-            if broken_vendor := md.tags.broken_vendor:
-                query.pytest_marks.append(pytest.mark.xfail(reason=broken_vendor))
-
-            if md.hide:
+            if query.metadata().hide:
                 # Some queries are entirely redundant (e.g. if a vendor simply
                 # does not support a type, there's no need to test it or
                 # report it)
