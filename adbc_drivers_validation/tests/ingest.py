@@ -484,6 +484,7 @@ class TestIngest:
                 cursor.adbc_ingest(table_name, data2, temporary=False)
 
             with conn.cursor() as cursor:
+                assert driver.features.current_schema is not None
                 normal_table = driver.quote_identifier(
                     driver.features.current_schema, table_name
                 )
@@ -521,6 +522,7 @@ class TestIngest:
         )
         table_name = "test_ingest_schema"
         schema_name = driver.features.secondary_schema
+        assert schema_name is not None
         with conn.cursor() as cursor:
             try:
                 cursor.execute(
@@ -564,6 +566,8 @@ class TestIngest:
         table_name = "test_ingest_catalog"
         schema_name = driver.features.secondary_catalog_schema
         catalog_name = driver.features.secondary_catalog
+        assert schema_name is not None
+        assert catalog_name is not None
         with conn.cursor() as cursor:
             try:
                 cursor.execute(

@@ -38,11 +38,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
+      - name: Install uv
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7.2.1
 
       - name: Test
         run: |
-          pip install -e .
-          pytest -vs .
+          uv run pytest -vs tests/
+
+      - name: Typecheck
+        run: |
+          uv run ty check

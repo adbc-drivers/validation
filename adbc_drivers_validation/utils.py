@@ -38,7 +38,7 @@ def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> 
 
 
 @contextlib.contextmanager
-def scoped_trace(msg: str) -> None:
+def scoped_trace(msg: str) -> typing.Generator[None, None, None]:
     """If an exception is raised, add the given note to it."""
     try:
         yield
@@ -50,16 +50,15 @@ def scoped_trace(msg: str) -> None:
 @contextlib.contextmanager
 def setup_connection(
     query: "Query", conn: adbc_driver_manager.dbapi.Connection
-) -> None:
+) -> typing.Generator[None]:
     md = query.metadata()
     connection_md = None
 
-    if "setup" in md:
-        if "connection" in md["setup"]:
-            connection_md = md["setup"]["connection"]
+    if md.setup.connection is not None:
+        connection_md = md.setup.connection
 
-    if connection_md is None and "connection" in md:
-        connection_md = md["connection"]
+    if connection_md is None and md.connection is not None:
+        connection_md = md.connection
         warnings.warn(
             f"Toplevel connection in {query.name}.toml is deprecated, use setup.connection instead",
             DeprecationWarning,
@@ -71,14 +70,10 @@ def setup_connection(
 
     options = {}
     options_revert = {}
-    for key, value in connection_md["options"].items():
-        if isinstance(value, dict):
-            assert "apply" in value
-            assert "revert" in value
-            options[key] = value["apply"]
-            options_revert[key] = value["revert"]
-        else:
-            options[key] = value
+    for key, value in connection_md.options.items():
+        options[key] = value.apply
+        if revert := value.revert:
+            options_revert[key] = revert
 
     conn.adbc_connection.set_options(**options)
     yield
@@ -86,16 +81,17 @@ def setup_connection(
 
 
 @contextlib.contextmanager
-def setup_statement(query: "Query", cursor: adbc_driver_manager.dbapi.Cursor) -> None:
+def setup_statement(
+    query: "Query", cursor: adbc_driver_manager.dbapi.Cursor
+) -> typing.Generator[None]:
     md = query.metadata()
     statement_md = None
 
-    if "setup" in md:
-        if "statement" in md["setup"]:
-            statement_md = md["setup"]["statement"]
+    if md.setup.statement is not None:
+        statement_md = md.setup.statement
 
-    if statement_md is None and "statement" in md:
-        statement_md = md["statement"]
+    if statement_md is None and md.statement is not None:
+        statement_md = md.statement
         warnings.warn(
             f"Toplevel statement in {query.name}.toml is deprecated, use setup.statement instead",
             DeprecationWarning,
@@ -107,14 +103,10 @@ def setup_statement(query: "Query", cursor: adbc_driver_manager.dbapi.Cursor) ->
 
     options = {}
     options_revert = {}
-    for key, value in statement_md["options"].items():
-        if isinstance(value, dict):
-            assert "apply" in value
-            assert "revert" in value
-            options[key] = value["apply"]
-            options_revert[key] = value["revert"]
-        else:
-            options[key] = value
+    for key, value in statement_md.options.items():
+        options[key] = value.apply
+        if revert := value.revert:
+            options_revert[key] = revert
 
     cursor.adbc_statement.set_options(**options)
     yield

@@ -17,7 +17,7 @@ from pathlib import Path
 import pyarrow
 import pytest
 
-from adbc_drivers_validation import model
+from adbc_drivers_validation import model, query_metadata
 
 
 def test_txtcase_empty(tmp_path: Path):
@@ -60,7 +60,9 @@ SELECT 1
     assert list(query_set.queries) == ["query"]
     query = query_set.queries["query"]
 
-    assert query.metadata() == {"tags": {"sql-type-name": "INT"}}
+    assert query.metadata() == query_metadata.QueryMetadata.model_validate(
+        {"tags": {"sql-type-name": "INT"}}
+    )
     assert isinstance(query.query, model.SelectQuery)
     assert query.query.setup_query() is None
     assert query.query.query().strip() == "SELECT 1"
@@ -123,9 +125,9 @@ partial-support = true
     assert list(query_set.queries) == ["query1", "query2", "query3"]
     query = query_set.queries["query1"]
 
-    assert query.metadata() == {
-        "tags": {"partial-support": True, "sql-type-name": "INT"}
-    }
+    assert query.metadata() == query_metadata.QueryMetadata.model_validate(
+        {"tags": {"partial-support": True, "sql-type-name": "INT"}}
+    )
     assert isinstance(query.query, model.SelectQuery)
     assert query.query.setup_query() is None
     assert query.query.query().strip() == "SELECT 1"

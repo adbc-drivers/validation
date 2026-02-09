@@ -16,6 +16,7 @@
 
 import re
 import tomllib
+import typing
 from pathlib import Path
 from typing import Self
 
@@ -76,7 +77,7 @@ class TxtCase:
     def parts(self) -> list[str]:
         return list(self._parts.keys())
 
-    def get_part(self, part: str, schema: pyarrow.Schema | None = None) -> str:
+    def get_part(self, part: str, schema: pyarrow.Schema | None = None) -> typing.Any:
         value = self._parts.get(part)
         if value is None:
             raise KeyError(f"'{part}' not in {self._path}")

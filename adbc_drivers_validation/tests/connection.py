@@ -81,9 +81,9 @@ class TestConnection:
 
         with conn_factory() as conn:
             assert conn.adbc_current_catalog == driver.features.current_catalog
-            conn.adbc_current_catalog = driver.features.secondary_catalog
+            conn.adbc_current_catalog = driver.features.secondary_catalog  # type: ignore[invalid-assignment]
             assert conn.adbc_current_catalog == driver.features.secondary_catalog
-            conn.adbc_current_catalog = driver.features.current_catalog
+            conn.adbc_current_catalog = driver.features.current_catalog  # type: ignore[invalid-assignment]
             assert conn.adbc_current_catalog == driver.features.current_catalog
 
     def test_set_current_schema(
@@ -96,9 +96,9 @@ class TestConnection:
 
         with conn_factory() as conn:
             assert conn.adbc_current_db_schema == driver.features.current_schema
-            conn.adbc_current_db_schema = driver.features.secondary_schema
+            conn.adbc_current_db_schema = driver.features.secondary_schema  # type: ignore[invalid-assignment]
             assert conn.adbc_current_db_schema == driver.features.secondary_schema
-            conn.adbc_current_db_schema = driver.features.current_schema
+            conn.adbc_current_db_schema = driver.features.current_schema  # type: ignore[invalid-assignment]
             assert conn.adbc_current_db_schema == driver.features.current_schema
 
     def test_get_info(
@@ -109,7 +109,7 @@ class TestConnection:
     ) -> None:
         info = conn.adbc_get_info()
         driver_version = info.get("driver_version")
-        assert (
+        assert driver_version and (
             driver_version.startswith("v")
             or driver_version == "unknown"
             or driver_version == "unknown-dirty"
@@ -124,7 +124,8 @@ class TestConnection:
             )
         else:
             assert vendor_version == driver.vendor_version
-        assert info.get("driver_arrow_version").startswith("v")
+        arrow_version = info.get("driver_arrow_version")
+        assert arrow_version and arrow_version.startswith("v")
         record_property("vendor_version", vendor_version)
         record_property("short_version", driver.short_version)
 
