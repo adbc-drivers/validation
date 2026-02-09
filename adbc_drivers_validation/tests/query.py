@@ -40,8 +40,7 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
 
     for quirks in all_quirks:
         driver_param = f"{quirks.name}:{quirks.short_version}"
-        queries = model.query_set(quirks.queries_paths)
-        for query in queries.queries.values():
+        for query in quirks.query_set.queries.values():
             marks = []
             marks.extend(query.pytest_marks)
 
