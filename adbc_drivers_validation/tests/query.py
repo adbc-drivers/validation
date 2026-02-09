@@ -161,15 +161,14 @@ class TestQuery:
 
                 table_name = None
                 md = query.metadata()
-                if "setup" in md and "drop" in md["setup"]:
-                    table_name = md["setup"]["drop"]
-                else:
+                table_name = md.setup.drop
+                if not table_name and isinstance(subquery, model.SelectQuery):
                     # XXX: rather hacky, but extract the table name from the SELECT query
                     # that would normally be executed
-                    query = subquery.query().split()
-                    for i, word in enumerate(query):
+                    query_str = subquery.query().split()
+                    for i, word in enumerate(query_str):
                         if word.upper() == "FROM":
-                            table_name = query[i + 1]
+                            table_name = query_str[i + 1]
                             break
 
                 assert table_name, "Could not determine table name"
@@ -192,7 +191,7 @@ class TestQuery:
             print(
                 str(field.type).ljust(40),
                 "=>",
-                query.metadata()["tags"]["sql-type-name"],
+                query.metadata().tags.sql_type_name,
             )
         elif isinstance(query.query, model.SelectQuery):
             schema = query.query.expected_schema()
@@ -201,11 +200,13 @@ class TestQuery:
                 print(
                     str(field.type).ljust(40),
                     "=>",
-                    query.metadata()["tags"]["sql-type-name"],
+                    query.metadata().tags.sql_type_name,
                 )
             else:
                 print(
-                    query.metadata()["tags"]["sql-type-name"].ljust(40),
+                    (query.metadata().tags.sql_type_name or "(unset type name)").ljust(
+                        40
+                    ),
                     "=>",
                     field.type,
                 )
@@ -219,6 +220,7 @@ def _setup_query(
     query: Query,
 ) -> None:
     subquery = query.query
+    assert isinstance(subquery, model.SelectQuery)
     setup = subquery.setup_query()
 
     if setup:
@@ -227,10 +229,8 @@ def _setup_query(
             # Avoid using the regular methods since we don't want to prepare()
             statements = []
 
-            if "setup" in md:
-                setup_md = md["setup"]
-                if "drop" in setup_md:
-                    statements.append(driver.drop_table(table_name=setup_md["drop"]))
+            if drop := md.setup.drop:
+                statements.append(driver.drop_table(table_name=drop))
 
             statements.extend(driver.split_statement(setup))
             for statement in statements:

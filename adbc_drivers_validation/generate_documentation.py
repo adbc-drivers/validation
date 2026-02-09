@@ -232,7 +232,6 @@ def render_to(sink: Path, template, kwargs) -> None:
         f.write(rendered)
         f.write("\n")
     print("Generated", sink)
-    return rendered
 
 
 def render_part(template, kwargs) -> str:
@@ -259,6 +258,8 @@ def load_testcases(
     for testcase in report.findall(".//testsuite[@name='validation']/testcase"):
         module = testcase.get("classname")
         name = testcase.get("name")
+        if name is None:
+            raise ValueError("Testcase without a name")
         if "[" in name:
             name, _, _ = name.partition("[")
         failure = testcase.find("failure")
@@ -281,7 +282,7 @@ def load_testcases(
             tags = {}
         else:
             query = query_set.queries[query_name]
-            tags = query.tags
+            tags = query.metadata().tags.model_dump(by_alias=True)
 
         if failure is not None or error is not None:
             test_result = "failed"
@@ -459,7 +460,7 @@ def render(
 
 def generate_includes(
     all_quirks: list[model.DriverQuirks], query_sets: dict[str, model.QuerySet]
-) -> dict[str, DriverTypeTable]:
+) -> ValidationReport:
     # Handle different versions of one vendor
     report = ValidationReport(
         driver=all_quirks[0].name,
@@ -531,11 +532,8 @@ def generate_includes(
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
             query = query_sets[test_case["vendor_version"]].queries[query_name]
-            show_type_parameters = (
-                query.metadata()
-                .get("tags", {})
-                .get("show-arrow-type-parameters", False)
-            )
+            show_type_parameters = query.metadata().tags.show_arrow_type_parameters
+
             # Take the first field; some queries may select additional things
             # like nested types to test how a type behaves in different
             # contexts
@@ -593,9 +591,7 @@ def generate_includes(
         query_set = query_sets[test_case["vendor_version"]]
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
-            bind_schema = query_set.queries[query_name].query.bind_schema()
-            field = bind_schema[-1]
-            arrow_type_names.add(arrow_type_name(field.type, field.metadata))
+            arrow_type_names.add(query_set.queries[query_name].arrow_type_name)
         sql_type = html.escape(test_case["sql_type"])
         arrow_type = html.escape(test_case["arrow_type_name"])
         report.add_table_entry(

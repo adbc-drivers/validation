@@ -27,7 +27,7 @@ import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
-from . import arrowjson, txtcase, utils
+from . import arrowjson, query_metadata, txtcase, utils
 
 ROOT = Path(__file__).parent
 DRIVER_EXTENSION = {"Windows": "dll", "Darwin": "dylib"}.get(platform.system(), "so")
@@ -182,10 +182,19 @@ class DriverFeatures:
             else:
                 params[key] = value
         params.update(kwargs)
-        return DriverFeatures(**params)
+        return self.__class__(**params)
 
 
 class DriverQuirks(abc.ABC):
+    name: str
+    driver: str
+    driver_name: str
+    vendor_name: str
+    vendor_version: str | re.Pattern[str]
+    short_version: str
+    features: DriverFeatures
+    setup: DriverSetup
+
     @property
     @abc.abstractmethod
     def queries_paths(self) -> tuple[Path]: ...
@@ -349,7 +358,7 @@ class SelectQuery:
             return None
         return try_txtcase(self.setup_query_path, query, ["setup_query"])
 
-    def bind_query(self, driver: DriverQuirks) -> str:
+    def bind_query(self, driver: DriverQuirks) -> str | None:
         if not self.bind_query_path:
             return None
 
@@ -394,7 +403,7 @@ class Query:
     metadata_paths: list[Path | dict[str, typing.Any]] | None = None
     pytest_marks: list = dataclasses.field(default_factory=list)
 
-    def metadata(self) -> dict[str, typing.Any]:
+    def metadata(self) -> query_metadata.QueryMetadata:
         md = {}
         for metadata_path in reversed(self.metadata_paths or []):
             if isinstance(metadata_path, dict):
@@ -402,16 +411,12 @@ class Query:
             else:
                 m = try_txtcase(metadata_path, query_meta, ["metadata"])
             utils.merge_into(md, m)
-        return md
-
-    @property
-    def tags(self) -> dict[str, typing.Any]:
-        return self.metadata().get("tags", {})
+        return query_metadata.QueryMetadata(**md)
 
     @property
     def arrow_type_name(self) -> str:
         """The human-friendly name of the Arrow type being tested."""
-        show_type_parameters = self.tags.get("show-arrow-type-parameters", False)
+        show_type_parameters = self.metadata().tags.show_arrow_type_parameters
         if isinstance(self.query, IngestQuery):
             # first field of input schema is the row index
             field = self.query.input_schema()[1]
@@ -537,7 +542,7 @@ class QuerySet:
     queries: dict[str, Query]
 
     @classmethod
-    def load(self, root: Path, parent: typing.Self | None = None) -> typing.Self:
+    def load(cls, root: Path, parent: typing.Self | None = None) -> typing.Self:
         def remove_all_suffixes(path: Path) -> Path:
             while path.suffix:
                 path = path.with_suffix("")
@@ -566,6 +571,8 @@ class QuerySet:
 
             if len(query_files) == 1 and query_files[0].suffixes == [".txtcase"]:
                 t = query_txtcase(query_files[0])
+                if t is None:
+                    raise ValueError(f"Could not load {query_files[0]}")
                 for part in t.parts:
                     params[f"{part}_path"] = query_files[0]
             else:
@@ -604,16 +611,16 @@ class QuerySet:
                 **params,
             )
 
-            if skip := query.metadata().get("skip"):
+            md = query.metadata()
+            if skip := md.skip:
                 query.pytest_marks.append(pytest.mark.skip(reason=skip))
 
-            tags = query.metadata().get("tags", {})
-            if broken_driver := tags.get("broken-driver", False):
+            if broken_driver := md.tags.broken_driver:
                 query.pytest_marks.append(pytest.mark.xfail(reason=broken_driver))
-            if broken_vendor := tags.get("broken-vendor", False):
+            if broken_vendor := md.tags.broken_vendor:
                 query.pytest_marks.append(pytest.mark.xfail(reason=broken_vendor))
 
-            if query.metadata().get("hide"):
+            if md.hide:
                 # Some queries are entirely redundant (e.g. if a vendor simply
                 # does not support a type, there's no need to test it or
                 # report it)
@@ -621,7 +628,7 @@ class QuerySet:
                     del queries[query_case]
             else:
                 queries[query_case] = query
-        return QuerySet(queries=queries)
+        return cls(queries=queries)
 
 
 @functools.cache
@@ -632,7 +639,7 @@ def base_query_set() -> QuerySet:
 
 @functools.cache
 def query_set(paths: tuple[Path]) -> QuerySet:
-    qs: QuerySet | None = None
+    qs = base_query_set()
     for path in paths:
-        qs = QuerySet.load(path, parent=qs or base_query_set())
+        qs = QuerySet.load(path, parent=qs)
     return qs

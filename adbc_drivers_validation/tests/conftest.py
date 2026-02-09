@@ -40,7 +40,7 @@ def pytest_collection_modifyitems(
 ) -> None:
     """Add JUnit XML metadata based on test markers and docstrings."""
     for item in items:
-        if not hasattr(item, "callspec"):
+        if not isinstance(item, pytest.Function) or not hasattr(item, "callspec"):
             continue
 
         if item.function.__doc__ is not None:
@@ -55,13 +55,13 @@ def pytest_collection_modifyitems(
 
         for key, value in item.callspec.params.items():
             if key == "driver":
+                assert isinstance(value, str)
                 item.user_properties.append(("driver", value))
             elif key == "query":
+                assert isinstance(value, model.Query)
                 item.user_properties.append(("query", value.name))
 
-                metadata = value.metadata()
-                tags = metadata.get("tags", {})
-                for tag_name, tag_value in tags.items():
+                for tag_name, tag_value in value.metadata().tags.model_dump().items():
                     if isinstance(tag_value, list):
                         for value in tag_value:
                             item.user_properties.append((f"tag:{tag_name}", value))
@@ -137,7 +137,7 @@ def conn_factory(
         def _cursor(*args, **kwargs) -> adbc_driver_manager.dbapi.Cursor:
             return make_cursor(adbc_stmt_kwargs=stmt_kwargs)
 
-        conn.cursor = _cursor
+        conn.cursor = _cursor  # type: ignore[invalid-assignment]
         return conn
 
     return _factory
@@ -146,6 +146,6 @@ def conn_factory(
 @pytest.fixture(scope="module")
 def conn(
     conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
-) -> adbc_driver_manager.dbapi.Connection:
+) -> typing.Generator[adbc_driver_manager.dbapi.Connection]:
     with conn_factory() as conn:
         yield conn

@@ -21,6 +21,8 @@ import typing
 import pyarrow
 import whenever
 
+from . import query_metadata
+
 T = typing.TypeVar("T", pyarrow.Schema, pyarrow.Table)
 
 
@@ -169,7 +171,7 @@ def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
 
 
 def compare_fields(
-    expected: pyarrow.Field, actual: pyarrow.Field, field_path: tuple[str] = ()
+    expected: pyarrow.Field, actual: pyarrow.Field, field_path: tuple[str, ...] = ()
 ) -> None:
     path = ".".join(field_path)
     if field_path:
@@ -280,14 +282,13 @@ def sort_oblivious(table: pyarrow.Table, sort_keys: typing.Any) -> pyarrow.Table
 def compare_tables(
     expected: pyarrow.Table,
     actual: pyarrow.Table,
-    meta: dict[str, typing.Any] | None = None,
+    meta: query_metadata.QueryMetadata | None = None,
 ):
     """Compare two Arrow tables for equality."""
-    meta = meta or {}
     expected = make_nullable(expected)
     actual = make_nullable(actual)
 
-    if sort_keys := meta.get("sort-keys", None):
+    if meta and (sort_keys := meta.sort_keys):
         expected = sort_oblivious(expected, sort_keys)
         actual = sort_oblivious(actual, sort_keys)
 
