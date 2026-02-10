@@ -31,6 +31,8 @@ class ReversibleOption(BaseModel):
 class ConnectionOptions(BaseModel):
     """Connection options for setup."""
 
+    model_config = ConfigDict(extra="forbid")
+
     options: dict[str, ReversibleOption] = Field(
         default_factory=dict,
         description="Connection options to apply. Values can be strings or dicts with 'apply' and 'revert' keys.",
@@ -54,6 +56,8 @@ class ConnectionOptions(BaseModel):
 
 class StatementOptions(BaseModel):
     """Statement options for setup."""
+
+    model_config = ConfigDict(extra="forbid")
 
     options: dict[str, ReversibleOption] = Field(
         default_factory=dict,
@@ -79,6 +83,8 @@ class StatementOptions(BaseModel):
 class SetupMetadata(BaseModel):
     """Setup metadata for a query."""
 
+    model_config = ConfigDict(extra="forbid")
+
     drop: str | None = Field(
         default=None,
         description="Name of the table to drop before running the query.",
@@ -96,7 +102,7 @@ class SetupMetadata(BaseModel):
 class TagsMetadata(BaseModel):
     """Tags metadata for a query."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     sql_type_name: str | None = Field(
         default=None,
@@ -136,7 +142,7 @@ class QueryMetadata(BaseModel):
     or in a .txtcase file under the '// part: metadata' section.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     hide: bool = Field(
         default=False,

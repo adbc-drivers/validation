@@ -14,8 +14,12 @@
 
 """Tests for the metadata Pydantic models."""
 
+import tomllib
 from pathlib import Path
 
+import pytest
+
+import adbc_drivers_validation.txtcase
 from adbc_drivers_validation.query_metadata import (
     ConnectionOptions,
     QueryMetadata,
@@ -154,3 +158,35 @@ class TestQueryMetadata:
             tags=TagsMetadata.model_validate({"sql-type-name": "INTEGER"})
         )
         assert metadata.tags.sql_type_name == "INTEGER"
+
+
+_root = Path(__file__).parent.parent / "adbc_drivers_validation/queries"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param(path, id=str(path.relative_to(_root)))
+        for path in _root.rglob("*.toml")
+    ],
+)
+def test_load_all_toml(path: Path):
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+    QueryMetadata.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param(path, id=str(path.relative_to(_root)))
+        for path in _root.rglob("*.txtcase")
+    ],
+)
+def test_load_all_txtcase(path: Path):
+    t = adbc_drivers_validation.txtcase.load(path)
+    try:
+        data = t.get_part("metadata")
+    except KeyError:
+        return
+    QueryMetadata.model_validate(data)
