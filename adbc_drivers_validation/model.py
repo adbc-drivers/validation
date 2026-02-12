@@ -261,6 +261,51 @@ class DriverQuirks(abc.ABC):
         else:
             return f"DROP TABLE {name}"
 
+    def try_drop_table(
+        self,
+        cursor: adbc_driver_manager.dbapi.Cursor,
+        *,
+        table_name: str,
+        schema_name: str | None = None,
+        catalog_name: str | None = None,
+        temporary: bool = False,
+    ) -> None:
+        """
+        Try to drop a table, ignoring errors if the table does not exist.
+
+        Some databases have no way to do DROP IF EXISTS, so this method
+        attempts to drop the table and catches errors that indicate the
+        table was not found.
+
+        Parameters
+        ----------
+        cursor : adbc_driver_manager.dbapi.Cursor
+            The cursor to execute the query.
+        table_name : str
+            The name of the table to drop.
+        schema_name : str, optional
+            The schema containing the table (if not given, assume current
+            schema).
+        catalog_name : str, optional
+            The catalog containing the table (if not given, assume current
+            catalog).
+        temporary : bool
+            If True, the table is a temporary table.
+        """
+        try:
+            cursor.execute(
+                self.drop_table(
+                    table_name=table_name,
+                    schema_name=schema_name,
+                    catalog_name=catalog_name,
+                    temporary=temporary,
+                )
+            )
+        except adbc_driver_manager.Error as e:
+            # Some databases have no way to do DROP IF EXISTS
+            if not self.is_table_not_found(table_name=table_name, error=e):
+                raise
+
     @abc.abstractmethod
     def is_table_not_found(self, table_name: str | None, error: Exception) -> bool:
         """

@@ -28,6 +28,7 @@ import pytest
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
 from adbc_drivers_validation.utils import (
+    execute_query_without_prepare,
     scoped_trace,
     setup_connection,
     setup_statement,
@@ -116,12 +117,7 @@ class TestQuery:
         with conn.cursor() as cursor:
             with setup_statement(query, cursor):
                 with scoped_trace(f"query: {sql}"):
-                    cursor.adbc_statement.set_sql_query(sql)
-                    handle, _ = cursor.adbc_statement.execute_query()
-                    with pyarrow.RecordBatchReader._import_from_c(
-                        handle.address
-                    ) as reader:
-                        result = reader.read_all()
+                    result = execute_query_without_prepare(cursor, sql)
 
         compare.compare_tables(expected_result, result, query.metadata())
 
