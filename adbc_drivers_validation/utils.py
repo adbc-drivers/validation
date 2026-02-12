@@ -113,6 +113,33 @@ def setup_statement(
     cursor.adbc_statement.set_options(**options_revert)
 
 
+def execute_query_without_prepare(
+    cursor: adbc_driver_manager.dbapi.Cursor, query: str
+) -> pyarrow.Table:
+    """
+    Execute a query without prepare and return the result.
+
+    This is a helper for executing queries using the lower-level ADBC API
+    without going through the DBAPI prepare mechanism.
+
+    Parameters
+    ----------
+    cursor : adbc_driver_manager.dbapi.Cursor
+        The cursor to execute the query.
+    query : str
+        The SQL query to execute.
+
+    Returns
+    -------
+    pyarrow.Table
+        The result of the query.
+    """
+    cursor.adbc_statement.set_sql_query(query)
+    handle, _ = cursor.adbc_statement.execute_query()
+    with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+        return reader.read_all()
+
+
 def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
     """Render the name of an Arrow type in a friendly way."""
     # Special handling (sometimes we want params, sometimes not)

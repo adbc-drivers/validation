@@ -30,7 +30,10 @@ import pytest
 
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.model import Query
-from adbc_drivers_validation.utils import setup_statement
+from adbc_drivers_validation.utils import (
+    execute_query_without_prepare,
+    setup_statement,
+)
 
 
 def generate_tests(
@@ -116,12 +119,7 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
 
             with setup_statement(query, cursor):
                 modified = cursor.adbc_ingest(table_name, data, mode="create")
@@ -136,10 +134,7 @@ class TestIngest:
         select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
         with conn.cursor() as cursor:
             with setup_statement(query, cursor):
-                cursor.adbc_statement.set_sql_query(select)
-                handle, _ = cursor.adbc_statement.execute_query()
-                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                    result = reader.read_all()
+                result = execute_query_without_prepare(cursor, select)
 
         # TODO: we should also inspect the type name and make sure it matches the
         # metadata
@@ -166,12 +161,7 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
             modified = cursor.adbc_ingest(table_name, data, mode="create")
             if driver.features.statement_rows_affected:
                 assert modified == len(data)
@@ -188,10 +178,7 @@ class TestIngest:
         value = driver.quote_identifier("value")
         select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         expected = subquery.expected()
         expected2 = pyarrow.Table.from_pydict(
@@ -220,12 +207,7 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
             with pytest.raises(adbc_driver_manager.dbapi.Error) as excinfo:
                 cursor.adbc_ingest(table_name, data, mode="append")
 
@@ -251,12 +233,7 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
             modified = cursor.adbc_ingest(table_name, data, mode="create_append")
             if driver.features.statement_rows_affected:
                 assert modified == len(data)
@@ -273,10 +250,7 @@ class TestIngest:
         value = driver.quote_identifier("value")
         select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         # TODO: we should also inspect the type name and make sure it matches the
         # metadata
@@ -305,12 +279,7 @@ class TestIngest:
         data2 = data.slice(0, 1)
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
             cursor.adbc_ingest(table_name, data, mode="replace")
             modified = cursor.adbc_ingest(table_name, data, mode="replace")
             if driver.features.statement_rows_affected:
@@ -331,10 +300,7 @@ class TestIngest:
         value = driver.quote_identifier("value")
         select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         expected = subquery.expected().slice(0, 1)
         compare.compare_tables(expected, result, query.metadata())
@@ -352,12 +318,7 @@ class TestIngest:
         data = subquery.input()
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
             modified = cursor.adbc_ingest(table_name, data, mode="replace")
             if driver.features.statement_rows_affected:
                 assert modified == len(data)
@@ -368,10 +329,7 @@ class TestIngest:
         value = driver.quote_identifier("value")
         select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         expected = subquery.expected()
         compare.compare_tables(expected, result, query.metadata())
@@ -401,12 +359,7 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
             cursor.adbc_ingest(table_name, data, mode="create")
 
         objects = (
@@ -482,12 +435,7 @@ class TestIngest:
 
         with conn_factory() as conn:
             with conn.cursor() as cursor:
-                try:
-                    cursor.execute(driver.drop_table(table_name=table_name))
-                except adbc_driver_manager.Error as e:
-                    # Some databases have no way to do DROP IF EXISTS
-                    if not driver.is_table_not_found(table_name=table_name, error=e):
-                        raise
+                driver.try_drop_table(cursor, table_name=table_name)
                 cursor.adbc_ingest(table_name, data1, temporary=True)
                 cursor.adbc_ingest(table_name, data2, temporary=False)
 
@@ -504,15 +452,11 @@ class TestIngest:
                     f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
                 )
 
-                cursor.adbc_statement.set_sql_query(select_normal)
-                handle, _ = cursor.adbc_statement.execute_query()
-                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                    result_normal = reader.read_all()
+                result_normal = execute_query_without_prepare(cursor, select_normal)
 
-                cursor.adbc_statement.set_sql_query(select_temporary)
-                handle, _ = cursor.adbc_statement.execute_query()
-                with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                    result_temporary = reader.read_all()
+                result_temporary = execute_query_without_prepare(
+                    cursor, select_temporary
+                )
 
         compare.compare_tables(data1, result_temporary)
         compare.compare_tables(data2, result_normal)
@@ -532,17 +476,9 @@ class TestIngest:
         schema_name = driver.features.secondary_schema
         assert schema_name is not None
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(
-                    driver.drop_table(
-                        table_name=table_name,
-                        schema_name=schema_name,
-                    )
-                )
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(
+                cursor, table_name=table_name, schema_name=schema_name
+            )
             cursor.adbc_ingest(
                 table_name,
                 data,
@@ -553,10 +489,7 @@ class TestIngest:
         value = driver.quote_identifier("value")
         select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         compare.compare_tables(data, result)
 
@@ -577,18 +510,12 @@ class TestIngest:
         assert schema_name is not None
         assert catalog_name is not None
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(
-                    driver.drop_table(
-                        table_name=table_name,
-                        schema_name=schema_name,
-                        catalog_name=catalog_name,
-                    )
-                )
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(
+                cursor,
+                table_name=table_name,
+                schema_name=schema_name,
+                catalog_name=catalog_name,
+            )
             cursor.adbc_ingest(
                 table_name,
                 data,
@@ -600,10 +527,7 @@ class TestIngest:
         value = driver.quote_identifier("value")
         select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         compare.compare_tables(data, result)
 
@@ -637,12 +561,7 @@ class TestIngest:
         reader = pyarrow.RecordBatchReader.from_batches(data.schema, batches)
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
 
             modified = cursor.adbc_ingest(table_name, reader, mode="create")
             # We expect num_batches * len(data) rows
@@ -657,10 +576,7 @@ class TestIngest:
             fields.append(driver.quote_identifier(field.name))
         select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         # Build expected result
         expected = subquery.expected()
@@ -708,12 +624,7 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
 
             modified = cursor.adbc_ingest(table_name, large_data, mode="create")
             if driver.features.statement_rows_affected:
@@ -727,10 +638,7 @@ class TestIngest:
             fields.append(driver.quote_identifier(field.name))
         select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(select)
-            handle, _ = cursor.adbc_statement.execute_query()
-            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-                result = reader.read_all()
+            result = execute_query_without_prepare(cursor, select)
 
         # Build expected result
         expected = subquery.expected()

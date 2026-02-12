@@ -266,11 +266,7 @@ class TestConnection:
         # parts of it
         table_name = "getobjectstest2"
         with conn.cursor() as cursor:
-            try:
-                cursor.execute(driver.drop_table(table_name=table_name))
-            except adbc_driver_manager.Error as e:
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            driver.try_drop_table(cursor, table_name=table_name)
 
         objects = conn.adbc_get_objects(depth="tables").read_all().to_pylist()
         tables = [
@@ -688,24 +684,14 @@ class TestConnection:
                 table_name,
             )
             with conn.cursor() as cursor:
-                try:
-                    cursor.execute(driver.drop_table(table_name=table_name))
-                except adbc_driver_manager.Error as e:
-                    # Some databases have no way to do DROP IF EXISTS
-                    if not driver.is_table_not_found(table_name=None, error=e):
-                        raise
+                driver.try_drop_table(cursor, table_name=table_name)
 
                 cursor.adbc_ingest(table_name, data)
 
             yield table_id
 
             with conn.cursor() as cursor:
-                try:
-                    cursor.execute(driver.drop_table(table_name=table_name))
-                except adbc_driver_manager.Error as e:
-                    # Some databases have no way to do DROP IF EXISTS
-                    if not driver.is_table_not_found(table_name=None, error=e):
-                        raise
+                driver.try_drop_table(cursor, table_name=table_name)
 
     @pytest.fixture(scope="class")
     def get_objects_constraints(
