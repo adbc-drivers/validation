@@ -19,6 +19,7 @@ To use: import TestIngest and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import itertools
 import re
 import time
 import typing
@@ -32,7 +33,12 @@ from adbc_drivers_validation.model import Query
 from adbc_drivers_validation.utils import setup_statement
 
 
-def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
+def generate_tests(
+    all_quirks: list[model.DriverQuirks],
+    metafunc,
+    *,
+    ingest_mode_queries={"ingest/string"},
+) -> None:
     """Parameterize the tests in this module for the given driver."""
     param_string = ""
     combinations = []
@@ -68,7 +74,7 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
 
             if (
                 metafunc.definition.name != "test_create"
-                and query.name != "ingest/string"
+                and query.name not in ingest_mode_queries
             ):
                 # There's no need to test every case on every mode
                 continue
@@ -375,6 +381,8 @@ class TestIngest:
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
     ) -> None:
+        # TODO: this should also be parametrized by a single query so that
+        # drivers can use ingest_mode_queries to run this test with other options
         if "xdbc_nullable" not in driver.features.supported_xdbc_fields:
             pytest.skip(reason="not implemented")
 
@@ -598,3 +606,149 @@ class TestIngest:
                 result = reader.read_all()
 
         compare.compare_tables(data, result)
+
+    def test_create_multiple_batches(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> None:
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        table_name = make_table_name("test_ingest_multiple_batches", query)
+        data = subquery.input()
+
+        # Create multiple batches by duplicating the input
+        num_batches = 3
+        batches = []
+        for i in range(num_batches):
+            batch_data = pyarrow.Table.from_pydict(
+                {
+                    data.schema[0].name: list(
+                        range(i * len(data), (i + 1) * len(data))
+                    ),
+                    data.schema[1].name: data[1],
+                },
+                schema=data.schema,
+            )
+            batches.extend(batch_data.to_batches())
+
+        reader = pyarrow.RecordBatchReader.from_batches(data.schema, batches)
+
+        with conn.cursor() as cursor:
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
+
+            modified = cursor.adbc_ingest(table_name, reader, mode="create")
+            # We expect num_batches * len(data) rows
+            if driver.features.statement_rows_affected:
+                assert modified == num_batches * len(data)
+            else:
+                assert modified == -1
+
+        # Read back and verify
+        fields = []
+        for field in data.schema:
+            fields.append(driver.quote_identifier(field.name))
+        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(select)
+            handle, _ = cursor.adbc_statement.execute_query()
+            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                result = reader.read_all()
+
+        # Build expected result
+        expected = subquery.expected()
+        expected_tables = []
+        for i in range(num_batches):
+            expected_i = pyarrow.Table.from_pydict(
+                {
+                    expected.schema[0].name: list(
+                        range(i * len(expected), (i + 1) * len(expected))
+                    ),
+                    expected.schema[1].name: expected[1],
+                },
+                schema=expected.schema,
+            )
+            expected_tables.append(expected_i)
+
+        compare.compare_tables(
+            pyarrow.concat_tables(expected_tables),
+            result,
+            query.metadata(),
+        )
+
+    def test_create_large_batch(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> None:
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        table_name = make_table_name("test_ingest_large_batch", query)
+        data = subquery.input()
+
+        # Create a large batch by concatenating the input multiple times
+        num_repeats = 1000
+        large_data = pyarrow.Table.from_pydict(
+            {
+                data.schema[0].name: list(range(num_repeats * len(data[0]))),
+                data.schema[1].name: list(
+                    itertools.chain(*[data[1] for _ in range(num_repeats)])
+                ),
+            },
+            schema=data.schema,
+        )
+
+        with conn.cursor() as cursor:
+            try:
+                cursor.execute(driver.drop_table(table_name=table_name))
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not driver.is_table_not_found(table_name=table_name, error=e):
+                    raise
+
+            modified = cursor.adbc_ingest(table_name, large_data, mode="create")
+            if driver.features.statement_rows_affected:
+                assert modified == num_repeats * len(data)
+            else:
+                assert modified == -1
+
+        # Read back and verify
+        fields = []
+        for field in data.schema:
+            fields.append(driver.quote_identifier(field.name))
+        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(select)
+            handle, _ = cursor.adbc_statement.execute_query()
+            with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+                result = reader.read_all()
+
+        # Build expected result
+        expected = subquery.expected()
+        expected_tables = []
+        for i in range(num_repeats):
+            expected_i = pyarrow.Table.from_pydict(
+                {
+                    expected.schema[0].name: list(
+                        range(i * len(expected), (i + 1) * len(expected))
+                    ),
+                    expected.schema[1].name: expected[1],
+                },
+                schema=expected.schema,
+            )
+            expected_tables.append(expected_i)
+
+        compare.compare_tables(
+            pyarrow.concat_tables(expected_tables),
+            result,
+            query.metadata(),
+        )
