@@ -18,6 +18,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## General Notes
+
+- Use `gh` CLI to read GitHub issues.
+
 ## Architecture Overview
 
 ### Project Structure
