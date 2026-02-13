@@ -25,6 +25,7 @@ from pathlib import Path
 
 import adbc_driver_manager.dbapi
 import pyarrow
+import pydantic
 import pytest
 
 from . import arrowjson, query_metadata, txtcase, utils
@@ -455,7 +456,12 @@ class Query:
             else:
                 m = try_txtcase(metadata_path, query_meta, ["metadata"])
             utils.merge_into(md, m)
-        return query_metadata.QueryMetadata(**md)
+        try:
+            return query_metadata.QueryMetadata(**md)
+        except pydantic.ValidationError as e:
+            e.add_note(f"query: {self.name}")
+            e.add_note(f"paths: {self.metadata_paths}")
+            raise
 
     @property
     def arrow_type_name(self) -> str:
