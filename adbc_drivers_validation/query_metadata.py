@@ -133,6 +133,10 @@ class TagsMetadata(BaseModel):
         alias="show-arrow-type-parameters",
         description="Show Arrow type parameters in documentation.",
     )
+    variant: str | None = Field(
+        default=None,
+        description="A variant name to distinguish this query from others with the same SQL type (for documentation).",
+    )
 
 
 class QueryMetadata(BaseModel):

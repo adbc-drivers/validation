@@ -24,47 +24,56 @@
 * - {{quirks.vendor_name}} Type
   - Arrow Type
 
-{%- for sql_type, arrow_type in type_select|sort %}
-* - {{ sql_type }}
-  - {{ arrow_type }}
+{%- for entry in type_select|sort(attribute="lhs") %}
+
+* - {{ entry.lhs }}
+  - {{ entry.render_rhs() }}
 {%- endfor -%}
 {{ "" }}
 :::
 
 #### Arrow to {{quirks.vendor_name}}
 
-<table class="docutils data align-default" style="width: 100%;">
-  <tr>
-    <th rowspan="2" style="text-align: center; vertical-align: middle;">Arrrow Type</th>
-    <th colspan="2" style="text-align: center;">{{quirks.vendor_name}} Type</th>
-  </tr>
-  <tr>
-    <th style="text-align: center;">Bind</th>
-    <th style="text-align: center;">Ingest</th>
-  </tr>
-{%- for arrow_type, sql_type_bind, sql_type_ingest in type_bind_ingest|sort %}
-<tr>
-  <td>{{ arrow_type }}</td>
-{%- if sql_type_bind == sql_type_ingest %}
 {# Note: The blank lines below make footnotes work #}
 {# See https://github.com/adbc-drivers/validation/issues/114 #}
-<td colspan="2" style="text-align: center;">
 
-{{ sql_type_bind }}
+<table class="docutils data align-default" style="width: 100%;">
+<thead>
+<tr>
+<th rowspan="2" style="text-align: center; vertical-align: middle;">Arrow Type</th>
+<th colspan="{{type_bind_ingest_columns|length}}" style="text-align: center;">{{quirks.vendor_name}} Type</th>
+</tr>
+<tr>
+{% for col in type_bind_ingest_columns %}
+<th style="text-align: center;">{{col}}</th>
+{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for row in type_bind_ingest %}
+<tr>
+{% for span, cell in row %}
+{% if loop.index == 0 %}
+<td>
+
+{{cell}}
+
+</td>
+{% elif span == 1 %}
+<td style="text-align: center;">
+
+{{cell}}
 
 </td>
 {% else %}
-<td style="text-align: center;">
+<td colspan="{{span}}" style="text-align: center;">
 
-{{ sql_type_bind }}
-
-</td>
-<td style="text-align: center;">
-
-{{ sql_type_ingest }}
+{{cell}}
 
 </td>
 {% endif %}
+{% endfor %}
 </tr>
-{%- endfor %}
+{% endfor %}
+</tbody>
 </table>
