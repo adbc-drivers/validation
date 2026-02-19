@@ -53,6 +53,8 @@ def generate_tests(
             "test_temporary": quirks.features.statement_bulk_ingest_temporary,
             "test_schema": quirks.features.statement_bulk_ingest_schema,
             "test_catalog": quirks.features.statement_bulk_ingest_catalog,
+            "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
+            "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
         }.get(metafunc.definition.name, None)
         if enabled is not None:
             marks = []
@@ -530,6 +532,159 @@ class TestIngest:
             result = execute_query_without_prepare(cursor, select)
 
         compare.compare_tables(data, result)
+
+    def test_replace_schema(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        # Create a table in the default schema
+        default_data = pyarrow.Table.from_pydict(
+            {
+                "idx": [10, 20, 30],
+                "value": ["original", "default", "schema"],
+            }
+        )
+        # Create different data for the secondary schema
+        data = pyarrow.Table.from_pydict(
+            {
+                "idx": [1, 2, 3],
+                "value": ["foo", "bar", "baz"],
+            }
+        )
+        data2 = data.slice(0, 1)
+
+        table_name = "test_ingest_replace_schema"
+        schema_name = driver.features.secondary_schema
+        assert schema_name is not None
+
+        with conn.cursor() as cursor:
+            # Create table in default schema
+            driver.try_drop_table(cursor, table_name=table_name)
+            cursor.adbc_ingest(table_name, default_data, mode="create")
+
+            # Create and replace table in secondary schema
+            driver.try_drop_table(
+                cursor, table_name=table_name, schema_name=schema_name
+            )
+            cursor.adbc_ingest(
+                table_name,
+                data,
+                mode="replace",
+                db_schema_name=schema_name,
+            )
+
+            if driver.name == "bigquery":
+                # BigQuery rate-limits metadata operations
+                time.sleep(5)
+
+            # Replace again with smaller dataset in secondary schema
+            modified = cursor.adbc_ingest(
+                table_name,
+                data2,
+                mode="replace",
+                db_schema_name=schema_name,
+            )
+            if driver.features.statement_rows_affected:
+                assert modified == len(data2)
+            else:
+                assert modified == -1
+
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+
+        # Verify secondary schema table has the replaced data
+        select_secondary = f"SELECT {idx}, {value} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {idx} ASC"
+        with conn.cursor() as cursor:
+            result_secondary = execute_query_without_prepare(cursor, select_secondary)
+        expected_secondary = data.slice(0, 1)
+        compare.compare_tables(expected_secondary, result_secondary)
+
+        # Verify default schema table is unchanged
+        select_default = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        with conn.cursor() as cursor:
+            result_default = execute_query_without_prepare(cursor, select_default)
+        compare.compare_tables(default_data, result_default)
+
+    def test_replace_catalog(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        # Create a table in the default catalog/schema
+        default_data = pyarrow.Table.from_pydict(
+            {
+                "idx": [10, 20, 30],
+                "value": ["original", "default", "catalog"],
+            }
+        )
+        # Create different data for the secondary catalog
+        data = pyarrow.Table.from_pydict(
+            {
+                "idx": [1, 2, 3],
+                "value": ["foo", "bar", "baz"],
+            }
+        )
+        data2 = data.slice(0, 1)
+
+        table_name = "test_ingest_replace_catalog"
+        schema_name = driver.features.secondary_catalog_schema
+        catalog_name = driver.features.secondary_catalog
+        assert schema_name is not None
+        assert catalog_name is not None
+
+        with conn.cursor() as cursor:
+            # Create table in default catalog/schema
+            driver.try_drop_table(cursor, table_name=table_name)
+            cursor.adbc_ingest(table_name, default_data, mode="create")
+
+            # Create and replace table in secondary catalog
+            driver.try_drop_table(
+                cursor,
+                table_name=table_name,
+                schema_name=schema_name,
+                catalog_name=catalog_name,
+            )
+            cursor.adbc_ingest(
+                table_name,
+                data,
+                mode="replace",
+                db_schema_name=schema_name,
+                catalog_name=catalog_name,
+            )
+
+            if driver.name == "bigquery":
+                # BigQuery rate-limits metadata operations
+                time.sleep(5)
+
+            # Replace again with smaller dataset in secondary catalog
+            modified = cursor.adbc_ingest(
+                table_name,
+                data2,
+                mode="replace",
+                db_schema_name=schema_name,
+                catalog_name=catalog_name,
+            )
+            if driver.features.statement_rows_affected:
+                assert modified == len(data2)
+            else:
+                assert modified == -1
+
+        idx = driver.quote_identifier("idx")
+        value = driver.quote_identifier("value")
+
+        # Verify secondary catalog table has the replaced data
+        select_secondary = f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC"
+        with conn.cursor() as cursor:
+            result_secondary = execute_query_without_prepare(cursor, select_secondary)
+        expected_secondary = data.slice(0, 1)
+        compare.compare_tables(expected_secondary, result_secondary)
+
+        # Verify default catalog/schema table is unchanged
+        select_default = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        with conn.cursor() as cursor:
+            result_default = execute_query_without_prepare(cursor, select_default)
+        compare.compare_tables(default_data, result_default)
 
     def test_create_multiple_batches(
         self,

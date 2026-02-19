@@ -18,6 +18,7 @@ Generate user documentation based on validation suite results.
 
 import collections
 import dataclasses
+import functools
 import html
 import json
 import typing
@@ -55,6 +56,27 @@ class CustomFeatures:
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class TypeTableEntry:
+    lhs: str
+    rhs: str
+    result: typing.Literal["passed", "partial", "failed"]
+    footnotes: tuple[str, ...] = dataclasses.field(default_factory=tuple)
+    # e.g. for BigQuery, we may have both "ingest (default)" and "ingest (with
+    # Storage Write API)" for the same type
+    variant: str | None = None
+
+    def render_rhs(self) -> str:
+        rhs = self.rhs
+        if self.result == "failed":
+            rhs = "❌"
+        elif self.result == "partial":
+            rhs += " ⚠️"
+        for footnote in self.footnotes:
+            rhs += footnote
+        return rhs
+
+
 @dataclasses.dataclass
 class DriverTypeTable:
     """A table of features supported by a driver."""
@@ -64,9 +86,9 @@ class DriverTypeTable:
 
     custom_features: CustomFeatures = dataclasses.field(default_factory=CustomFeatures)
 
-    type_select: list[tuple[str, str]] = dataclasses.field(default_factory=list)
-    type_bind: list[tuple[str, str]] = dataclasses.field(default_factory=list)
-    type_ingest: list[tuple[str, str]] = dataclasses.field(default_factory=list)
+    type_select: list[TypeTableEntry] = dataclasses.field(default_factory=list)
+    type_bind: list[TypeTableEntry] = dataclasses.field(default_factory=list)
+    type_ingest: list[TypeTableEntry] = dataclasses.field(default_factory=list)
 
     get_objects: dict[str, bool] = dataclasses.field(default_factory=dict)
     get_table_schema: bool = False
@@ -113,15 +135,18 @@ class DriverTypeTable:
             status = "✅" if supported else "❌"
             lines.append(f"- {name}: {status}")
 
-        def render_type_table(category: str, entries: list[tuple[str, str]]) -> None:
+        def render_type_table(category: str, entries: list[TypeTableEntry]) -> None:
             if not entries:
                 return
             lines.append("")
             lines.append(f"{category.capitalize()} Types")
             lines.append("~" * (len(category) + 6))
-            max_lhs = max(len(lhs) for lhs, _ in entries)
-            for lhs, rhs in entries:
-                lines.append(f"- {lhs.ljust(max_lhs)} → {rhs}")
+            max_lhs = max(len(entry.lhs) for entry in entries)
+            for entry in entries:
+                line = f"- {entry.lhs.ljust(max_lhs)} → {entry.render_rhs()}"
+                if entry.variant:
+                    line += f" ({entry.variant})"
+                lines.append(line)
 
         render_type_table("select", self.type_select)
         render_type_table("bind", self.type_bind)
@@ -183,9 +208,9 @@ class ValidationReport:
         test_case: dict[str, typing.Any],
         *,
         extra_caveats: list[str] | None = None,
+        variant: str | None = None,
     ) -> None:
         caveats = []
-        table_entry = rhs
         passed = test_case["test_results"].count("passed")
 
         partial_support = False
@@ -199,29 +224,38 @@ class ValidationReport:
             if caveat := meta.get("broken-vendor"):
                 caveats.append(caveat)
 
+        result = "passed"
         if passed == 0:
-            table_entry = "❌"
+            result = "failed"
         elif (
             partial_support or passed < len(test_case["test_results"]) or extra_caveats
         ):
-            table_entry += " ⚠️"
-            for query_name, result in zip(
+            result = "partial"
+            for query_name, test_result in zip(
                 test_case["query_names"], test_case["test_results"]
             ):
-                if result == "passed":
+                if test_result == "passed":
                     continue
                 query_kind = query_name.split("/")[1]
                 caveats.append(f"{query_kind} is not supported for {rhs}")
 
         caveats.extend(extra_caveats or [])
 
+        footnotes = []
         for caveat in caveats:
             fn = self.add_footnote("types", caveat)
-            if fn not in table_entry:
-                table_entry += fn
+            if fn not in footnotes:
+                footnotes.append(fn)
+        footnotes = tuple(sorted(footnotes))
 
         getattr(self.versions[vendor_version], f"type_{category}").append(
-            (lhs, table_entry)
+            TypeTableEntry(
+                lhs=lhs,
+                rhs=rhs,
+                result=result,
+                footnotes=footnotes,
+                variant=variant,
+            )
         )
 
 
@@ -367,6 +401,7 @@ def render(
     env = jinja2.Environment(
         loader=jinja2.PackageLoader("adbc_drivers_validation"),
         autoescape=jinja2.select_autoescape(),
+        trim_blocks=True,
     )
     with driver_template_path.open("r") as source:
         driver_template = env.from_string(source.read())
@@ -379,32 +414,49 @@ def render(
         **dataclasses.asdict(report.versions[default_vendor_version]),
         "driver": report.driver,
     }
+    template_vars["type_select"] = report.versions[default_vendor_version].type_select
 
-    # Combine bind and ingest into a single type_bind_ingest table
-    # TODO: This could be factored up into add_table_entry or something but that
-    # method is built for a two-column table not three. Or this could be done
-    # entirely with SQL.
-    #
-    # This makes a list with 3-tuple items: (arrow_type, bind_type, ingest_type)
-    bind_dict = {}
-    ingest_dict = {}
+    # Combine bind and ingest into a single type_bind_ingest table. The table
+    # has a variable number of columns since ingest may have multiple modes.
+    # Because the logic gets complicated, render it entirely in Python rather
+    # than in the template
 
-    for arrow_type, sql_type in template_vars["type_bind"]:
-        if arrow_type in bind_dict:
-            bind_dict[arrow_type] += f", {sql_type}"
-        else:
-            bind_dict[arrow_type] = sql_type
+    # (bind, ingest, ingest variant, ...) : { Arrow type name : SQL type names }
+    columns = collections.defaultdict(lambda: collections.defaultdict(set))
 
-    for arrow_type, sql_type in template_vars["type_ingest"]:
-        if arrow_type in ingest_dict:
-            ingest_dict[arrow_type] += f", {sql_type}"
-        else:
-            ingest_dict[arrow_type] = sql_type
+    for entry in report.versions[default_vendor_version].type_bind:
+        columns["Bind"][entry.lhs].add(entry)
+    for entry in report.versions[default_vendor_version].type_ingest:
+        column = "Ingest"
+        if entry.variant:
+            column += f" ({entry.variant})"
+        columns[column][entry.lhs].add(entry)
 
-    template_vars["type_bind_ingest"] = [
-        (k, bind_dict.get(k, "(not tested)"), ingest_dict.get(k, "(not tested)"))
-        for k in set(bind_dict) | set(ingest_dict)
-    ]
+    column_order = list(sorted(columns.keys()))
+    row_order = list(
+        sorted(functools.reduce(lambda a, b: a | b, (set(c) for c in columns.values())))
+    )
+    type_bind_ingest = []
+    for k in row_order:
+        all_cells = []
+        for c in column_order:
+            entries = columns[c].get(k)
+            if entries:
+                # TODO: more sophisticated merging?
+                all_cells.append(", ".join(entry.render_rhs() for entry in entries))
+            else:
+                all_cells.append("(not tested)")
+
+        span_cells = [[1, k]]
+        for i, cell in enumerate(all_cells):
+            if i > 0 and cell == span_cells[-1][1]:
+                span_cells[-1][0] += 1
+            else:
+                span_cells.append([1, cell])
+        type_bind_ingest.append(span_cells)
+
+    template_vars["type_bind_ingest"] = type_bind_ingest
+    template_vars["type_bind_ingest_columns"] = column_order
 
     types = render_part(env.get_template("types.md"), template_vars)
     features = render_part(env.get_template("features.md"), template_vars)
@@ -625,6 +677,7 @@ def generate_includes(
     )
     for test_case in type_tests:
         query_set = query_sets[test_case["vendor_version"]]
+        query_name = test_case["query_name"]
         arrow_type = html.escape(test_case["arrow_type_name"])
         sql_type = html.escape(test_case["sql_type"])
         report.add_table_entry(
@@ -637,6 +690,7 @@ def generate_includes(
                 "query_names": [test_case["query_name"]],
                 "tags": [test_case["tags"]],
             },
+            variant=query_set.queries[query_name].metadata().tags.variant,
         )
 
     # GetObjects
