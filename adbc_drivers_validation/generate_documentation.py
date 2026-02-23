@@ -282,11 +282,10 @@ def render_part(template, kwargs) -> str:
 
 
 def load_testcases(
-    quirks: model.DriverQuirks, results_path: Path, query_set: model.QuerySet
+    get_quirks: typing.Callable[[str], model.DriverQuirks], results_path: Path
 ) -> None:
     """Load test case data into DuckDB."""
     report = xml.etree.ElementTree.parse(results_path).getroot()
-    driver_name = f"{quirks.name}:{quirks.short_version}"
 
     testcases = []
     for testcase in report.findall(".//testsuite[@name='validation']/testcase"):
@@ -304,9 +303,9 @@ def load_testcases(
         for prop in testcase.findall(".//properties/property"):
             properties[prop.get("name")] = prop.get("value")
 
-        driver = properties["driver"]
-        if driver != driver_name:
-            continue
+        driver, _, version = properties["driver"].partition(":")
+        quirks = get_quirks(version)
+        query_set = quirks.query_set
         driver = quirks.name
         version = quirks.short_version
 
@@ -511,18 +510,18 @@ def render(
 
 
 def generate_includes(
-    all_quirks: list[model.DriverQuirks], query_sets: dict[str, model.QuerySet]
+    get_quirks: typing.Callable[[str], model.DriverQuirks],
 ) -> ValidationReport:
     # Handle different versions of one vendor
-    report = ValidationReport(
-        driver=all_quirks[0].name,
-        versions={
-            quirks.short_version: DriverTypeTable(
-                quirks=quirks, features=quirks.features
-            )
-            for quirks in all_quirks
-        },
-    )
+    driver = duckdb.sql("FROM testcases SELECT DISTINCT driver").fetchall()
+    assert len(driver) == 1, f"Expected exactly one driver, got {driver}"
+    driver = driver[0][0]
+    versions = {}
+    for row in duckdb.sql("FROM testcases SELECT DISTINCT vendor_version").fetchall():
+        quirks = get_quirks(row[0])
+        versions[row[0]] = DriverTypeTable(quirks=quirks, features=quirks.features)
+
+    report = ValidationReport(driver=driver, versions=versions)
 
     # Version
     version = (
@@ -583,7 +582,9 @@ def generate_includes(
     for test_case in type_tests:
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
-            query = query_sets[test_case["vendor_version"]].queries[query_name]
+            query = get_quirks(test_case["vendor_version"]).query_set.queries[
+                query_name
+            ]
             show_type_parameters = query.metadata().tags.show_arrow_type_parameters
 
             # Take the first field; some queries may select additional things
@@ -640,7 +641,7 @@ def generate_includes(
         .to_pylist()
     )
     for test_case in type_tests:
-        query_set = query_sets[test_case["vendor_version"]]
+        query_set = get_quirks(test_case["vendor_version"]).query_set
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
             arrow_type_names.add(query_set.queries[query_name].arrow_type_name)
@@ -676,7 +677,7 @@ def generate_includes(
         .to_pylist()
     )
     for test_case in type_tests:
-        query_set = query_sets[test_case["vendor_version"]]
+        query_set = get_quirks(test_case["vendor_version"]).query_set
         query_name = test_case["query_name"]
         arrow_type = html.escape(test_case["arrow_type_name"])
         sql_type = html.escape(test_case["sql_type"])
@@ -798,20 +799,13 @@ def generate_includes(
 
 
 def generate(
-    all_quirks: list[model.DriverQuirks],
-    test_results: Path,
+    get_quirks: typing.Callable[[str], model.DriverQuirks],
+    test_results: list[Path],
     driver_template: Path,
     output: Path,
 ) -> None:
-    if len({quirks.name for quirks in all_quirks}) != 1:
-        raise ValueError("All quirks must be for the same driver")
-    if len({quirks.short_version for quirks in all_quirks}) != len(all_quirks):
-        raise ValueError("All quirks must be for the different versions")
-
-    query_sets = {}
-    for quirks in all_quirks:
-        load_testcases(quirks, test_results, quirks.query_set)
-        query_sets[quirks.short_version] = quirks.query_set
-    report = generate_includes(all_quirks, query_sets)
+    for results in test_results:
+        load_testcases(get_quirks, results)
+    report = generate_includes(get_quirks)
     print(report.pprint())
     render(report, driver_template, output)
