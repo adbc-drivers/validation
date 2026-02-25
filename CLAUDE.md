@@ -21,6 +21,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## General Notes
 
 - Use `gh` CLI to read GitHub issues.
+- Research whether the database system in question supports the type or not. If it does not, then the best course of action is to create a txtcase file with `hide = true`. Otherwise you may want to use either `broken-driver` or `broken-vendor`.
+- See `query_metadata.py` for the format of metadata.
+- Don't cram multiple shell commands in one attempt as it forces me to manually review every time.
+- Include license headers in txtcase files.
+- When generating query metadata, make sure to define sql-type-name. Again, research what the right name for the particular vendor is.
 
 ## Architecture Overview
 

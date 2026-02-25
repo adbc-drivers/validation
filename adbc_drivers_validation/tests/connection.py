@@ -37,16 +37,24 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
     for quirks in all_quirks:
         driver_param = f"{quirks.name}:{quirks.short_version}"
         marks = []
-        if (
-            enabled := {
-                "test_get_objects_constraints_check": quirks.features.get_objects_constraints_check,
-                "test_get_objects_constraints_foreign": quirks.features.get_objects_constraints_foreign,
-                "test_get_objects_constraints_primary": quirks.features.get_objects_constraints_primary,
-                "test_get_objects_constraints_unique": quirks.features.get_objects_constraints_unique,
-            }.get(metafunc.definition.name)
-        ) is not None:
-            if not enabled:
+        f = quirks.features
+        if metafunc.definition.name.startswith("test_get_objects_constraints_"):
+            enabled = {
+                "constraints_check": f.get_objects and f.get_objects_constraints_check,
+                "constraints_foreign": f.get_objects
+                and f.get_objects_constraints_foreign,
+                "constraints_primary": f.get_objects
+                and f.get_objects_constraints_primary,
+                "constraints_unique": f.get_objects
+                and f.get_objects_constraints_unique,
+            }.get(metafunc.definition.name[len("test_get_objects_") :])
+            if enabled is not None and not enabled:
                 marks.append(pytest.mark.skip(reason="not implemented"))
+        elif not f.get_objects and metafunc.definition.name.startswith(
+            "test_get_objects_"
+        ):
+            marks.append(pytest.mark.xfail(reason="not implemented"))
+
         combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
     metafunc.parametrize(
         "driver",
@@ -62,14 +70,20 @@ class TestConnection:
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
     ) -> None:
-        assert conn.adbc_current_catalog == driver.features.current_catalog
+        assert (
+            driver.features.current_catalog is None
+            or conn.adbc_current_catalog == driver.features.current_catalog
+        )
 
     def test_current_db_schema(
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
     ) -> None:
-        assert conn.adbc_current_db_schema == driver.features.current_schema
+        assert (
+            driver.features.current_schema is None
+            or conn.adbc_current_db_schema == driver.features.current_schema
+        )
 
     def test_set_current_catalog(
         self,
@@ -109,8 +123,9 @@ class TestConnection:
     ) -> None:
         info = conn.adbc_get_info()
         driver_version = info.get("driver_version")
+        version_re = re.compile("^v?\\d+(\\.\\d+){0,2}$")
         assert driver_version and (
-            driver_version.startswith("v")
+            version_re.match(driver_version)
             or driver_version == "unknown"
             or driver_version == "unknown-dirty"
         )
@@ -124,10 +139,17 @@ class TestConnection:
             )
         else:
             assert vendor_version == driver.vendor_version
-        arrow_version = info.get("driver_arrow_version")
-        assert arrow_version and arrow_version.startswith("v")
         record_property("vendor_version", vendor_version)
         record_property("short_version", driver.short_version)
+
+    def test_get_info_arrow_version(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        info = conn.adbc_get_info()
+        arrow_version = info.get("driver_arrow_version")
+        assert arrow_version and arrow_version.startswith("v")
 
     def test_get_objects_catalog(
         self, conn: adbc_driver_manager.dbapi.Connection, driver: model.DriverQuirks

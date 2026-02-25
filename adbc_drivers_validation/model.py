@@ -101,6 +101,7 @@ class DriverFeatures:
     connection_set_current_catalog: bool = False
     connection_set_current_schema: bool = False
     connection_transactions: bool = False
+    get_objects: bool = False
     get_objects_constraints_check: bool = False
     get_objects_constraints_foreign: bool = False
     get_objects_constraints_primary: bool = False
