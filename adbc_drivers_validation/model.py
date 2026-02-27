@@ -27,6 +27,7 @@ import adbc_driver_manager.dbapi
 import pyarrow
 import pydantic
 import pytest
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from . import arrowjson, query_metadata, txtcase, utils
 
@@ -77,9 +78,15 @@ def try_txtcase(path: Path, fallback, parts: list[str], schema=None):
     raise ValueError(f"{path} does not contain any of {parts}")
 
 
-@dataclasses.dataclass
-class FromEnv:
-    env: str
+class FromEnv(BaseModel):
+    """A value that is read from an environment variable at runtime."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    env: str = Field(description="Environment variable to read the value from")
+
+    def __init__(self, env: str):
+        super().__init__(env=env)
 
     def get_or_raise(self) -> str:
         value = os.environ.get(self.env)
@@ -88,57 +95,53 @@ class FromEnv:
         return value
 
 
-@dataclasses.dataclass
-class DriverSetup:
-    database: dict[str, str | FromEnv]
-    connection: dict[str, str | FromEnv]
-    statement: dict[str, str | FromEnv]
+class DriverSetup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    database: dict[str, str | FromEnv] = Field(default_factory=dict)
+    connection: dict[str, str | FromEnv] = Field(default_factory=dict)
+    statement: dict[str, str | FromEnv] = Field(default_factory=dict)
 
 
-@dataclasses.dataclass
-class DriverFeatures:
-    connection_get_table_schema: bool = False
-    connection_set_current_catalog: bool = False
-    connection_set_current_schema: bool = False
-    connection_transactions: bool = False
-    get_objects: bool = False
-    get_objects_constraints_check: bool = False
-    get_objects_constraints_foreign: bool = False
-    get_objects_constraints_primary: bool = False
-    get_objects_constraints_unique: bool = False
-    statement_bind: bool = False
-    statement_bulk_ingest: bool = False
-    statement_bulk_ingest_catalog: bool = False
-    statement_bulk_ingest_schema: bool = False
-    statement_bulk_ingest_temporary: bool = False
-    statement_execute_schema: bool = False
-    statement_get_parameter_schema: bool = False
-    statement_prepare: bool = False
-    statement_rows_affected: bool = False
-    statement_rows_affected_ddl: bool = False
-    _current_catalog: str | FromEnv | None = None
-    _current_schema: str | FromEnv | None = None
-    _secondary_schema: str | FromEnv | None = None
-    _secondary_catalog: str | FromEnv | None = None
-    _secondary_catalog_schema: str | FromEnv | None = None
-    supported_xdbc_fields: list[str] = dataclasses.field(default_factory=list)
+class DriverFeatures(BaseModel):
+    connection_get_table_schema: bool = Field(default=False)
+    connection_set_current_catalog: bool = Field(default=False)
+    connection_set_current_schema: bool = Field(default=False)
+    connection_transactions: bool = Field(default=False)
+    get_objects: bool = Field(default=False)
+    get_objects_constraints_check: bool = Field(default=False)
+    get_objects_constraints_foreign: bool = Field(default=False)
+    get_objects_constraints_primary: bool = Field(default=False)
+    get_objects_constraints_unique: bool = Field(default=False)
+    statement_bind: bool = Field(default=False)
+    statement_bulk_ingest: bool = Field(default=False)
+    statement_bulk_ingest_catalog: bool = Field(default=False)
+    statement_bulk_ingest_schema: bool = Field(default=False)
+    statement_bulk_ingest_temporary: bool = Field(default=False)
+    statement_execute_schema: bool = Field(default=False)
+    statement_get_parameter_schema: bool = Field(default=False)
+    statement_prepare: bool = Field(default=False)
+    statement_rows_affected: bool = Field(default=False)
+    statement_rows_affected_ddl: bool = Field(default=False)
+    _current_catalog: str | FromEnv | None = PrivateAttr(default=None)
+    _current_schema: str | FromEnv | None = PrivateAttr(default=None)
+    _secondary_schema: str | FromEnv | None = PrivateAttr(default=None)
+    _secondary_catalog: str | FromEnv | None = PrivateAttr(default=None)
+    _secondary_catalog_schema: str | FromEnv | None = PrivateAttr(default=None)
+    supported_xdbc_fields: list[str] = Field(default_factory=list)
     # Some vendors sort the columns, so declaring FOREIGN KEY(b, a) REFERENCES
     # foo(d, c) still gets returned in the order (a, c), (b, d)
-    quirk_get_objects_constraints_foreign_normalized: bool = False
-    quirk_get_objects_constraints_primary_normalized: bool = False
-    quirk_get_objects_constraints_unique_normalized: bool = False
+    quirk_get_objects_constraints_foreign_normalized: bool = Field(default=False)
+    quirk_get_objects_constraints_primary_normalized: bool = Field(default=False)
+    quirk_get_objects_constraints_unique_normalized: bool = Field(default=False)
 
-    def __init__(self, **kwargs) -> None:
-        for key, value in kwargs.items():
-            if key in {
-                "current_catalog",
-                "current_schema",
-                "secondary_schema",
-                "secondary_catalog",
-                "secondary_catalog_schema",
-            }:
-                key = "_" + key
-            setattr(self, key, value)
+    def __init__(self, **data: typing.Any):
+        super().__init__(**data)
+        self._current_catalog = data.get("current_catalog")
+        self._current_schema = data.get("current_schema")
+        self._secondary_schema = data.get("secondary_schema")
+        self._secondary_catalog = data.get("secondary_catalog")
+        self._secondary_catalog_schema = data.get("secondary_catalog_schema")
 
     @property
     def current_catalog(self) -> str | None:
@@ -171,20 +174,16 @@ class DriverFeatures:
         return self._secondary_catalog_schema
 
     def with_values(self, **kwargs) -> typing.Self:
-        params = {}
-        for key, value in dataclasses.asdict(self).items():
+        for key in list(kwargs.keys()):
             if key in {
-                "_current_catalog",
-                "_current_schema",
-                "_secondary_schema",
-                "_secondary_catalog",
-                "_secondary_catalog_schema",
+                "current_catalog",
+                "current_schema",
+                "secondary_schema",
+                "secondary_catalog",
+                "secondary_catalog_schema",
             }:
-                params[key[1:]] = value
-            else:
-                params[key] = value
-        params.update(kwargs)
-        return self.__class__(**params)
+                kwargs[f"_{key}"] = kwargs.pop(key)
+        return self.model_copy(update=kwargs)
 
 
 class DriverQuirks(abc.ABC):
