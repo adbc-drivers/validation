@@ -102,14 +102,14 @@ class DriverTypeTable:
         lines.append("Features")
         lines.append("~~~~~~~~")
 
-        for field in dataclasses.fields(self.features):
-            if field.name.startswith("_"):
+        for field in self.features.__fields__:
+            if field.startswith("_"):
                 continue
 
-            value = getattr(self.features, field.name)
+            value = getattr(self.features, field)
             if isinstance(value, bool):
                 value = "✅" if value else "❌"
-            lines.append(f"- {field.name}: {value}")
+            lines.append(f"- {field}: {value}")
 
         for group, features in self.custom_features.groups.items():
             lines.append(f"- {group}:")
