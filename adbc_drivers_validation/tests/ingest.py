@@ -842,4 +842,5 @@ class TestIngest:
                 f"SELECT COUNT(*) FROM {driver.quote_identifier(table_name)}"
             )
             result = cursor.fetchone()
+            assert result is not None
             assert result[0] == num_rows
