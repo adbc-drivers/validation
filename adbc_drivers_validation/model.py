@@ -117,6 +117,7 @@ class DriverFeatures(BaseModel):
     statement_bulk_ingest: bool = Field(default=False)
     statement_bulk_ingest_catalog: bool = Field(default=False)
     statement_bulk_ingest_schema: bool = Field(default=False)
+    statement_bulk_ingest_many_columns: bool = Field(default=False)
     statement_bulk_ingest_temporary: bool = Field(default=False)
     statement_execute_schema: bool = Field(default=False)
     statement_get_parameter_schema: bool = Field(default=False)
