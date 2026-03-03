@@ -123,7 +123,7 @@ class TestConnection:
     ) -> None:
         info = conn.adbc_get_info()
         driver_version = info.get("driver_version")
-        version_re = re.compile("^v?\\d+(\\.\\d+){0,2}$")
+        version_re = re.compile("^v?\\d+(\\.\\d+){0,2}(-.+)?$")
         assert driver_version and (
             version_re.match(driver_version)
             or driver_version == "unknown"
