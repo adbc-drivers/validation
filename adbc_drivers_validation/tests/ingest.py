@@ -54,7 +54,7 @@ def generate_tests(
             "test_schema": quirks.features.statement_bulk_ingest_schema,
             "test_catalog": quirks.features.statement_bulk_ingest_catalog,
             "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
-            "test_many_columns": quirks.features.statement_bulk_ingest_many_columns,
+            "test_many_columns": quirks.features.statement_bulk_ingest,
             "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
         }.get(metafunc.definition.name, None)
         if enabled is not None:
@@ -822,9 +822,9 @@ class TestIngest:
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
     ) -> None:
-        """Test bulk ingest with 100 columns to verify placeholder limit handling."""
+        """Test bulk ingest with many columns (https://github.com/adbc-drivers/mysql/issues/70)."""
         num_cols = 100
-        num_rows = 5
+        num_rows = 1000
         table_name = "test_ingest_many_columns"
 
         data = pyarrow.table(
