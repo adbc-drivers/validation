@@ -54,6 +54,7 @@ def generate_tests(
             "test_schema": quirks.features.statement_bulk_ingest_schema,
             "test_catalog": quirks.features.statement_bulk_ingest_catalog,
             "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
+            "test_many_columns": quirks.features.statement_bulk_ingest,
             "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
         }.get(metafunc.definition.name, None)
         if enabled is not None:
@@ -815,3 +816,31 @@ class TestIngest:
             result,
             query.metadata(),
         )
+
+    def test_many_columns(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        """Test bulk ingest with many columns (https://github.com/adbc-drivers/mysql/issues/70)."""
+        num_cols = 100
+        num_rows = 1000
+        table_name = "test_ingest_many_columns"
+
+        data = pyarrow.table(
+            {f"col_{i}": list(range(num_rows)) for i in range(num_cols)}
+        )
+
+        with conn.cursor() as cursor:
+            modified = cursor.adbc_ingest(table_name, data, mode="replace")
+            if driver.features.statement_rows_affected:
+                assert modified == num_rows
+            else:
+                assert modified == -1
+
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {driver.quote_identifier(table_name)}"
+            )
+            result = cursor.fetchone()
+            assert result is not None
+            assert result[0] == num_rows
