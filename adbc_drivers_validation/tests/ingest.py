@@ -53,9 +53,7 @@ def generate_tests(
             "test_temporary": quirks.features.statement_bulk_ingest_temporary,
             "test_schema": quirks.features.statement_bulk_ingest_schema,
             "test_catalog": quirks.features.statement_bulk_ingest_catalog,
-            "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
             "test_many_columns": quirks.features.statement_bulk_ingest,
-            "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
         }.get(metafunc.definition.name, None)
         if enabled is not None:
             marks = []
@@ -69,8 +67,14 @@ def generate_tests(
             continue
 
         param_string = "driver,query"
+        enabled = {
+            "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
+            "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
+        }.get(metafunc.definition.name, None)
         for query in quirks.query_set.queries.values():
             marks = []
+            if enabled is not None and not enabled:
+                marks.append(pytest.mark.skip(reason="not implemented"))
             marks.extend(query.pytest_marks)
 
             if not isinstance(query.query, model.IngestQuery):
@@ -538,26 +542,27 @@ class TestIngest:
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
     ) -> None:
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+        data = subquery.input()
+        expected = subquery.expected()
         # Create a table in the default schema
-        default_data = pyarrow.Table.from_pydict(
-            {
-                "idx": [10, 20, 30],
-                "value": ["original", "default", "schema"],
-            }
-        )
+        default_data = data
         # Create different data for the secondary schema
-        data = pyarrow.Table.from_pydict(
-            {
-                "idx": [1, 2, 3],
-                "value": ["foo", "bar", "baz"],
-            }
-        )
+        data = data.slice(0, 2)
         data2 = data.slice(0, 1)
 
         table_name = "test_ingest_replace_schema"
         schema_name = driver.features.secondary_schema
         assert schema_name is not None
+
+        fields = []
+        for field in data.schema:
+            fields.append(driver.quote_identifier(field.name))
+        select_default = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        select_secondary = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {fields[0]} ASC"
 
         with conn.cursor() as cursor:
             # Create table in default schema
@@ -591,41 +596,31 @@ class TestIngest:
             else:
                 assert modified == -1
 
-        idx = driver.quote_identifier("idx")
-        value = driver.quote_identifier("value")
-
         # Verify secondary schema table has the replaced data
-        select_secondary = f"SELECT {idx}, {value} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             result_secondary = execute_query_without_prepare(cursor, select_secondary)
-        expected_secondary = data.slice(0, 1)
+        expected_secondary = expected.slice(0, 1)
         compare.compare_tables(expected_secondary, result_secondary)
 
         # Verify default schema table is unchanged
-        select_default = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             result_default = execute_query_without_prepare(cursor, select_default)
-        compare.compare_tables(default_data, result_default)
+        compare.compare_tables(expected, result_default)
 
     def test_replace_catalog(
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
     ) -> None:
-        # Create a table in the default catalog/schema
-        default_data = pyarrow.Table.from_pydict(
-            {
-                "idx": [10, 20, 30],
-                "value": ["original", "default", "catalog"],
-            }
-        )
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+        data = subquery.input()
+        expected = subquery.expected()
+        # Create a table in the default catalog
+        default_data = data
         # Create different data for the secondary catalog
-        data = pyarrow.Table.from_pydict(
-            {
-                "idx": [1, 2, 3],
-                "value": ["foo", "bar", "baz"],
-            }
-        )
+        data = data.slice(0, 2)
         data2 = data.slice(0, 1)
 
         table_name = "test_ingest_replace_catalog"
@@ -678,14 +673,14 @@ class TestIngest:
         select_secondary = f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             result_secondary = execute_query_without_prepare(cursor, select_secondary)
-        expected_secondary = data.slice(0, 1)
+        expected_secondary = expected.slice(0, 1)
         compare.compare_tables(expected_secondary, result_secondary)
 
         # Verify default catalog/schema table is unchanged
         select_default = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
         with conn.cursor() as cursor:
             result_default = execute_query_without_prepare(cursor, select_default)
-        compare.compare_tables(default_data, result_default)
+        compare.compare_tables(expected, result_default)
 
     def test_create_multiple_batches(
         self,
