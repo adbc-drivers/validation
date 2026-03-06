@@ -129,6 +129,9 @@ class DriverFeatures(BaseModel):
     _secondary_catalog: str | FromEnv | None = PrivateAttr(default=None)
     _secondary_catalog_schema: str | FromEnv | None = PrivateAttr(default=None)
     supported_xdbc_fields: list[str] = Field(default_factory=list)
+    # Some databases support temporary tables, but they exist in the same
+    # namespace as regular tables, so we need to change how we test them.
+    quirk_bulk_ingest_temporary_shares_namespace: bool = Field(default=False)
     # Some vendors sort the columns, so declaring FOREIGN KEY(b, a) REFERENCES
     # foo(d, c) still gets returned in the order (a, c), (b, d)
     quirk_get_objects_constraints_foreign_normalized: bool = Field(default=False)
@@ -331,8 +334,10 @@ class DriverQuirks(abc.ABC):
         """
         raise NotImplementedError
 
-    def quote_identifier(self, *identifiers: str) -> str:
-        return ".".join(self.quote_one_identifier(ident) for ident in identifiers)
+    def quote_identifier(self, *identifiers: str | None) -> str:
+        return ".".join(
+            self.quote_one_identifier(ident) for ident in identifiers if ident
+        )
 
     def quote_one_identifier(self, identifier: str) -> str:
         """Quote an identifier (e.g. table or column name)."""
@@ -546,6 +551,9 @@ class Query:
                     # absent a specific bind query, we should bind the
                     # parameters to the regular query
                     if parent.query.bind_query_path:
+                        # If one is defined, all of them must be
+                        assert parent.query.bind_schema_path is not None
+                        assert parent.query.bind_path is not None
                         params["bind_query_path"] = parent.query.bind_query_path
                         params["bind_schema_path"] = parent.query.bind_schema_path
                         params["bind_path"] = parent.query.bind_path

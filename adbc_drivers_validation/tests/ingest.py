@@ -50,7 +50,6 @@ def generate_tests(
         driver_param = f"{quirks.name}:{quirks.short_version}"
         enabled = {
             "test_not_null": quirks.features.statement_bulk_ingest,
-            "test_temporary": quirks.features.statement_bulk_ingest_temporary,
             "test_schema": quirks.features.statement_bulk_ingest_schema,
             "test_catalog": quirks.features.statement_bulk_ingest_catalog,
             "test_many_columns": quirks.features.statement_bulk_ingest,
@@ -70,6 +69,7 @@ def generate_tests(
         enabled = {
             "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
             "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
+            "test_temporary": quirks.features.statement_bulk_ingest_temporary,
         }.get(metafunc.definition.name, None)
         for query in quirks.query_set.queries.values():
             marks = []
@@ -422,51 +422,69 @@ class TestIngest:
         self,
         driver: model.DriverQuirks,
         conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+        query: Query,
     ) -> None:
-        data1 = pyarrow.Table.from_pydict(
-            {
-                "idx": [1, 2, 3],
-                "value": ["foo", "bar", "baz"],
-            }
-        )
-        data2 = pyarrow.Table.from_pydict(
-            {
-                "idx": [4, 5, 6],
-                "value": ["qux", "quux", "spam"],
-            }
-        )
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+        data = subquery.input()
+        expected = subquery.expected()
+
         table_name = "test_ingest_temporary"
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
+        if driver.features.quirk_bulk_ingest_temporary_shares_namespace:
+            with conn_factory() as conn:
+                with conn.cursor() as cursor:
+                    driver.try_drop_table(cursor, table_name=table_name)
+                    cursor.adbc_ingest(table_name, data, temporary=True)
+                    temp_table = driver.qualify_temp_table(cursor, table_name)
+                    select_temporary = (
+                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
+                    )
+                    result_temporary = execute_query_without_prepare(
+                        cursor, select_temporary
+                    )
+            compare.compare_tables(expected, result_temporary)
 
-        with conn_factory() as conn:
-            with conn.cursor() as cursor:
-                driver.try_drop_table(cursor, table_name=table_name)
-                cursor.adbc_ingest(table_name, data1, temporary=True)
-                cursor.adbc_ingest(table_name, data2, temporary=False)
+            with conn_factory() as conn:
+                with conn.cursor() as cursor:
+                    temp_table = driver.qualify_temp_table(cursor, table_name)
+                    select_temporary = (
+                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
+                    )
+                    with pytest.raises(Exception) as excinfo:
+                        execute_query_without_prepare(cursor, select_temporary)
+                    assert driver.is_table_not_found(table_name, excinfo.value)
+        else:
+            with conn_factory() as conn:
+                with conn.cursor() as cursor:
+                    driver.try_drop_table(cursor, table_name=table_name)
+                    cursor.adbc_ingest(table_name, data.slice(0, 1), temporary=True)
+                    cursor.adbc_ingest(table_name, data.slice(1), temporary=False)
 
-            with conn.cursor() as cursor:
-                assert driver.features.current_schema is not None
-                normal_table = driver.quote_identifier(
-                    driver.features.current_schema, table_name
-                )
-                temp_table = driver.qualify_temp_table(cursor, table_name)
-                select_normal = (
-                    f"SELECT {idx}, {value} FROM {normal_table} ORDER BY {idx} ASC"
-                )
-                select_temporary = (
-                    f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
-                )
+                with conn.cursor() as cursor:
+                    assert driver.features.current_schema is not None
+                    normal_table = driver.quote_identifier(
+                        driver.features.current_catalog,
+                        driver.features.current_schema,
+                        table_name,
+                    )
+                    temp_table = driver.qualify_temp_table(cursor, table_name)
+                    select_normal = (
+                        f"SELECT {idx}, {value} FROM {normal_table} ORDER BY {idx} ASC"
+                    )
+                    select_temporary = (
+                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
+                    )
 
-                result_normal = execute_query_without_prepare(cursor, select_normal)
+                    result_normal = execute_query_without_prepare(cursor, select_normal)
+                    result_temporary = execute_query_without_prepare(
+                        cursor, select_temporary
+                    )
 
-                result_temporary = execute_query_without_prepare(
-                    cursor, select_temporary
-                )
-
-        compare.compare_tables(data1, result_temporary)
-        compare.compare_tables(data2, result_normal)
+            compare.compare_tables(expected.slice(0, 1), result_temporary)
+            compare.compare_tables(expected.slice(1), result_normal)
 
     def test_schema(
         self,
