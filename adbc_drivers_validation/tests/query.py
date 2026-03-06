@@ -52,20 +52,16 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
             ):
                 marks.append(pytest.mark.skip(reason="bind not supported"))
 
-            if metafunc.definition.name == "test_execute_schema":
+            if metafunc.definition.name in {
+                "test_execute_schema",
+                "test_get_table_schema",
+            }:
                 if not isinstance(query.query, model.SelectQuery):
                     continue
                 if not query.name.startswith("type/select/"):
                     # There's no need to repeat this test multiple times per type
                     continue
                 if not quirks.features.statement_execute_schema:
-                    marks.append(pytest.mark.skip(reason="not implemented"))
-            elif metafunc.definition.name == "test_get_table_schema":
-                if not isinstance(query.query, model.SelectQuery):
-                    continue
-                elif not query.name.startswith("type/select/"):
-                    continue
-                elif not quirks.features.connection_get_table_schema:
                     marks.append(pytest.mark.skip(reason="not implemented"))
             elif metafunc.definition.name == "test_query":
                 if not isinstance(query.query, model.SelectQuery):

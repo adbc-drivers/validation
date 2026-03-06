@@ -135,9 +135,13 @@ def execute_query_without_prepare(
         The result of the query.
     """
     cursor.adbc_statement.set_sql_query(query)
-    handle, _ = cursor.adbc_statement.execute_query()
-    with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
-        return reader.read_all()
+    try:
+        handle, _ = cursor.adbc_statement.execute_query()
+        with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+            return reader.read_all()
+    except Exception as e:
+        e.add_note(f"Query: {query}")
+        raise
 
 
 def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
