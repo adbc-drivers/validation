@@ -49,6 +49,7 @@ def generate_tests(
     for quirks in all_quirks:
         driver_param = f"{quirks.name}:{quirks.short_version}"
         enabled = {
+            "test_ingest_no_parameters": quirks.features.statement_bulk_ingest,
             "test_not_null": quirks.features.statement_bulk_ingest,
             "test_schema": quirks.features.statement_bulk_ingest_schema,
             "test_catalog": quirks.features.statement_bulk_ingest_catalog,
@@ -858,6 +859,31 @@ class TestIngest:
             result = cursor.fetchone()
             assert result is not None
             assert result[0] == num_rows
+
+    def test_ingest_no_parameters(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        # Ensure ingest works without parameters bound
+        table_name = "test_ingest_no_parameters"
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_options(
+                **{
+                    adbc_driver_manager.StatementOptions.INGEST_TARGET_TABLE.value: table_name,
+                }
+            )
+            with pytest.raises(adbc_driver_manager.dbapi.Error) as excinfo:
+                cursor.adbc_statement.execute_update()
+
+            if driver.features.quirk_foundry:
+                assert (
+                    excinfo.value.status_code
+                    == adbc_driver_manager.AdbcStatusCode.INVALID_STATE
+                )
+                assert isinstance(
+                    excinfo.value, adbc_driver_manager.dbapi.ProgrammingError
+                )
 
     def test_ingest_then_query(
         self,

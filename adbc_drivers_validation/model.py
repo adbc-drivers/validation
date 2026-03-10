@@ -132,6 +132,9 @@ class DriverFeatures(BaseModel):
     # Some databases support temporary tables, but they exist in the same
     # namespace as regular tables, so we need to change how we test them.
     quirk_bulk_ingest_temporary_shares_namespace: bool = Field(default=False)
+    # Certain checks that are not strictly required by the spec, but which we
+    # expect drivers developed by the foundry directly to conform to
+    quirk_foundry: bool = Field(default=True)
     # Some vendors sort the columns, so declaring FOREIGN KEY(b, a) REFERENCES
     # foo(d, c) still gets returned in the order (a, c), (b, d)
     quirk_get_objects_constraints_foreign_normalized: bool = Field(default=False)
