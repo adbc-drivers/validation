@@ -67,6 +67,7 @@ def generate_tests(
 
         param_string = "driver,query"
         enabled = {
+            "test_ingest_then_query": quirks.features.statement_bulk_ingest,
             "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
             "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
             "test_temporary": quirks.features.statement_bulk_ingest_temporary,
@@ -857,3 +858,33 @@ class TestIngest:
             result = cursor.fetchone()
             assert result is not None
             assert result[0] == num_rows
+
+    def test_ingest_then_query(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> None:
+        # Some drivers failed ingest-then-query on the same statement
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        table_name = make_table_name("test_ingest_then_query", query)
+        data = subquery.input()
+        expected = subquery.expected()
+        fields = []
+        for field in data.schema:
+            fields.append(driver.quote_identifier(field.name))
+        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+
+        with conn.cursor() as cursor:
+            driver.try_drop_table(cursor, table_name=table_name)
+            modified = cursor.adbc_ingest(table_name, data, mode="create")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data)
+            else:
+                assert modified == -1
+
+            result = execute_query_without_prepare(cursor, select)
+
+        compare.compare_tables(expected, result, query.metadata())
