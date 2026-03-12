@@ -96,6 +96,8 @@
 </table>
 
 {% if custom_features.groups %}
+### Driver-Specific Features
+
 <table class="docutils data align-default" style="width: 100%">
   <colgroup>
     <col span="1" style="width: 25%;">
@@ -112,18 +114,18 @@
     </tr>
   </thead>
   <tbody>
-    {%- for group, features in custom_features.groups.items() %}
-    {%- for feature in features %}
+    {% for group, features in custom_features.groups.items() %}
+    {% for feature in features %}
     <tr>
-    {%- if loop.first %}
+    {% if loop.first %}
       <td rowspan="{{ features|length }}">{{ group }}</td>
-    {%- endif %}
+    {% endif %}
       <td>{{ feature.name }}</td>
       <td>{% if feature.supported %}✅{% else %}❌{% endif %}</td>
       <td>{{ feature.description }}</td>
     </tr>
-    {%- endfor %}
-    {%- endfor %}
+    {% endfor %}
+    {% endfor %}
   </tbody>
 </table>
 {% endif %}
