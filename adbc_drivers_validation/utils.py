@@ -74,6 +74,11 @@ def setup_connection(
         options[key] = value.apply
         if revert := value.revert:
             options_revert[key] = revert
+        else:
+            warnings.warn(
+                f"No revert value for connection option {key} in {query.name}, this will likely have unexpected side effects!",
+                DeprecationWarning,
+            )
 
     conn.adbc_connection.set_options(**options)
     yield

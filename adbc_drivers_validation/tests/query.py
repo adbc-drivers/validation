@@ -19,8 +19,6 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
-import typing
-
 import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
@@ -140,35 +138,34 @@ class TestQuery:
     def test_get_table_schema(
         self,
         driver: model.DriverQuirks,
-        conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+        conn: adbc_driver_manager.dbapi.Connection,
         query: model.Query,
     ) -> None:
         subquery = query.query
 
         expected_schema = subquery.expected_schema()
 
-        with conn_factory() as conn:
-            with setup_connection(query, conn):
-                _setup_query(driver, conn, query)
+        with setup_connection(query, conn):
+            _setup_query(driver, conn, query)
 
-                table_name = None
-                md = query.metadata()
-                table_name = md.setup.drop
-                if not table_name and isinstance(subquery, model.SelectQuery):
-                    # XXX: rather hacky, but extract the table name from the SELECT query
-                    # that would normally be executed
-                    query_str = subquery.query().split()
-                    for i, word in enumerate(query_str):
-                        if word.upper() == "FROM":
-                            table_name = query_str[i + 1]
-                            break
+            table_name = None
+            md = query.metadata()
+            table_name = md.setup.drop
+            if not table_name and isinstance(subquery, model.SelectQuery):
+                # XXX: rather hacky, but extract the table name from the SELECT query
+                # that would normally be executed
+                query_str = subquery.query().split()
+                for i, word in enumerate(query_str):
+                    if word.upper() == "FROM":
+                        table_name = query_str[i + 1]
+                        break
 
-                assert table_name, "Could not determine table name"
+            assert table_name, "Could not determine table name"
 
-                schema = conn.adbc_get_table_schema(table_name)
-                # Ignore the first column which is normally used to sort the table
-                schema = pyarrow.schema(list(schema)[1:])
-                compare.compare_schemas(expected_schema, schema)
+            schema = conn.adbc_get_table_schema(table_name)
+            # Ignore the first column which is normally used to sort the table
+            schema = pyarrow.schema(list(schema)[1:])
+            compare.compare_schemas(expected_schema, schema)
 
     def test_show_queries(
         self,
