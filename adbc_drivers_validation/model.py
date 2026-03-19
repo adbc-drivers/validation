@@ -406,6 +406,10 @@ class SelectQuery:
     bind_schema_path: Path | None = None
     #: Data for the bind parameters.
     bind_path: Path | None = None
+    #: Schema of the result set (when not executing a query).  For some
+    #: databases and some situations, this is different than the schema you get
+    #: when you actually execute the query.
+    catalog_schema_path: Path | None = None
 
     def setup_query(self) -> str | None:
         if not self.setup_query_path:
@@ -433,6 +437,11 @@ class SelectQuery:
 
     def expected_schema(self) -> pyarrow.Schema:
         return try_txtcase(self.expected_schema_path, query_schema, ["expected_schema"])
+
+    def catalog_schema(self) -> pyarrow.Schema:
+        if not self.catalog_schema_path:
+            return self.expected_schema()
+        return try_txtcase(self.catalog_schema_path, query_schema, ["catalog_schema"])
 
     def expected_result(self) -> pyarrow.Table:
         return try_txtcase(
@@ -548,6 +557,8 @@ class Query:
                         "expected_schema_path": parent.query.expected_schema_path,
                         "expected_path": parent.query.expected_path,
                     }
+                    if parent.query.catalog_schema_path:
+                        params["catalog_schema_path"] = parent.query.catalog_schema_path
                     if parent.query.setup_query_path:
                         params["setup_query_path"] = parent.query.setup_query_path
                     # TODO: we also want to test with ExecuteQuery so perhaps
@@ -588,6 +599,7 @@ class Query:
             in {
                 "query_path",
                 "expected_schema_path",
+                "catalog_schema_path",
                 "expected_path",
                 "setup_query_path",
                 "bind_query_path",
