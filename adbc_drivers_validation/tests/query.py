@@ -123,9 +123,8 @@ class TestQuery:
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
-
         sql = subquery.query()
-        expected_schema = subquery.expected_schema()
+        expected_schema = subquery.catalog_schema()
 
         _setup_query(driver, conn, query)
 
@@ -142,8 +141,8 @@ class TestQuery:
         query: model.Query,
     ) -> None:
         subquery = query.query
-
-        expected_schema = subquery.expected_schema()
+        assert isinstance(subquery, model.SelectQuery)
+        expected_schema = subquery.catalog_schema()
 
         with setup_connection(query, conn):
             _setup_query(driver, conn, query)
@@ -151,7 +150,7 @@ class TestQuery:
             table_name = None
             md = query.metadata()
             table_name = md.setup.drop
-            if not table_name and isinstance(subquery, model.SelectQuery):
+            if not table_name:
                 # XXX: rather hacky, but extract the table name from the SELECT query
                 # that would normally be executed
                 query_str = subquery.query().split()

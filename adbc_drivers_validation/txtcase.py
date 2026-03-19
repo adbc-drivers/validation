@@ -92,7 +92,7 @@ class TxtCase:
 
         if part == "metadata":
             return tomllib.loads(value)
-        if part in {"bind_schema", "expected_schema", "input_schema"}:
+        if part in {"bind_schema", "expected_schema", "catalog_schema", "input_schema"}:
             return arrowjson.loads_schema(value)
         elif part in {"bind_query", "query", "setup_query"}:
             return value
