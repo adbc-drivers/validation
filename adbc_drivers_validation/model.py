@@ -105,6 +105,7 @@ class DriverSetup(BaseModel):
 
 class DriverFeatures(BaseModel):
     connection_get_table_schema: bool = Field(default=False)
+    connection_get_statistics: bool = Field(default=False)
     connection_set_current_catalog: bool = Field(default=False)
     connection_set_current_schema: bool = Field(default=False)
     connection_transactions: bool = Field(default=False)
