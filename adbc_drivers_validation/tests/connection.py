@@ -30,6 +30,51 @@ import pytest
 from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.utils import scoped_trace
 
+# Expected schema for GetStatistics (ADBC spec)
+# Built up from innermost to outermost types
+
+_STATISTIC_VALUE_TYPE = pyarrow.dense_union(
+    [
+        pyarrow.field("int64", pyarrow.int64()),
+        pyarrow.field("uint64", pyarrow.uint64()),
+        pyarrow.field("float64", pyarrow.float64()),
+        pyarrow.field("binary", pyarrow.binary()),
+    ],
+    type_codes=[0, 1, 2, 3],
+)
+
+_STATISTICS_STRUCT = pyarrow.struct(
+    [
+        pyarrow.field("table_name", pyarrow.string(), nullable=False),
+        pyarrow.field("column_name", pyarrow.string()),
+        pyarrow.field("statistic_key", pyarrow.int16(), nullable=False),
+        pyarrow.field("statistic_value", _STATISTIC_VALUE_TYPE, nullable=False),
+        pyarrow.field("statistic_is_approximate", pyarrow.bool_(), nullable=False),
+    ]
+)
+
+_DB_SCHEMA_STRUCT = pyarrow.struct(
+    [
+        pyarrow.field("db_schema_name", pyarrow.string()),
+        pyarrow.field(
+            "db_schema_statistics",
+            pyarrow.list_(_STATISTICS_STRUCT),
+            nullable=False,
+        ),
+    ]
+)
+
+_EXPECTED_GET_STATISTICS_SCHEMA = pyarrow.schema(
+    [
+        pyarrow.field("catalog_name", pyarrow.string()),
+        pyarrow.field(
+            "catalog_db_schemas",
+            pyarrow.list_(_DB_SCHEMA_STRUCT),
+            nullable=False,
+        ),
+    ]
+)
+
 
 def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
     """Parameterize the tests in this module for the given driver."""
@@ -54,6 +99,9 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
             "test_get_objects_"
         ):
             marks.append(pytest.mark.xfail(reason="not implemented"))
+        elif metafunc.definition.name == "test_get_statistics":
+            if not f.connection_get_statistics:
+                marks.append(pytest.mark.skip(reason="not implemented"))
 
         combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
     metafunc.parametrize(
@@ -65,45 +113,6 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
 
 
 class TestConnection:
-    @staticmethod
-    def _expected_get_statistics_schema() -> pyarrow.Schema:
-        statistic_value = pyarrow.dense_union(
-            [
-                pyarrow.field("int64", pyarrow.int64()),
-                pyarrow.field("uint64", pyarrow.uint64()),
-                pyarrow.field("float64", pyarrow.float64()),
-                pyarrow.field("binary", pyarrow.binary()),
-            ],
-            type_codes=[0, 1, 2, 3],
-        )
-        statistics = pyarrow.struct(
-            [
-                pyarrow.field("table_name", pyarrow.string(), nullable=False),
-                pyarrow.field("column_name", pyarrow.string()),
-                pyarrow.field("statistic_key", pyarrow.int16(), nullable=False),
-                pyarrow.field("statistic_value", statistic_value, nullable=False),
-                pyarrow.field(
-                    "statistic_is_approximate", pyarrow.bool_(), nullable=False
-                ),
-            ]
-        )
-        db_schema = pyarrow.struct(
-            [
-                pyarrow.field("db_schema_name", pyarrow.string()),
-                pyarrow.field(
-                    "db_schema_statistics", pyarrow.list_(statistics), nullable=False
-                ),
-            ]
-        )
-        return pyarrow.schema(
-            [
-                pyarrow.field("catalog_name", pyarrow.string()),
-                pyarrow.field(
-                    "catalog_db_schemas", pyarrow.list_(db_schema), nullable=False
-                ),
-            ]
-        )
-
     def test_current_catalog(
         self,
         driver: model.DriverQuirks,
@@ -1064,11 +1073,9 @@ class TestConnection:
         get_statistics_table: tuple[str, str, str],
     ) -> None:
         """Test GetStatistics"""
-        if not driver.features.connection_get_statistics:
-            pytest.skip("not implemented")
-
-        if not hasattr(conn, "adbc_get_statistics"):
-            pytest.skip("adbc_driver_manager DBAPI does not expose GetStatistics")
+        assert hasattr(conn, "adbc_get_statistics"), (
+            "Driver claims to support GetStatistics but adbc_driver_manager DBAPI does not expose it"
+        )
 
         table_id = get_statistics_table
         table_name = table_id[-1]
@@ -1083,8 +1090,8 @@ class TestConnection:
         table = reader.read_all()
 
         # Verify schema matches ADBC spec
-        assert table.schema.equals(self._expected_get_statistics_schema()), (
-            f"Schema mismatch: expected {self._expected_get_statistics_schema()}, got {table.schema}"
+        assert table.schema.equals(_EXPECTED_GET_STATISTICS_SCHEMA), (
+            "GetStatistics returned schema does not match ADBC specification"
         )
 
         # Find and verify table statistics
@@ -1128,27 +1135,9 @@ class TestConnection:
         all_stats = table_stats + [s for stats in column_stats.values() for s in stats]
 
         for stat in all_stats:
-            # Verify required fields are present
-            assert "statistic_key" in stat
-            assert "statistic_value" in stat
-            assert "statistic_is_approximate" in stat
-
             # Verify statistic key is valid. Values in [0, 1024) are reserved for ADBC
             assert 0 <= stat["statistic_key"] <= 1024, (
                 f"Invalid statistic key: {stat['statistic_key']} (must be 0-1024)"
-            )
-
-            # Verify statistic_is_approximate is a boolean
-            assert isinstance(stat["statistic_is_approximate"], bool), (
-                "statistic_is_approximate should be a boolean"
-            )
-
-            # Verify statistic value is a scalar (int, float, bytes, or None)
-            assert isinstance(
-                stat["statistic_value"], (int, float, bytes, type(None))
-            ), (
-                f"statistic_value should be int|float|bytes|None, "
-                f"got {type(stat['statistic_value'])}"
             )
 
         # If row count statistic is present, verify it's reasonable since approx = true
@@ -1158,9 +1147,6 @@ class TestConnection:
         )
         if row_count_stat is not None:
             row_count_value = row_count_stat["statistic_value"]
-            assert isinstance(row_count_value, (int, float)), (
-                "Row count should be numeric"
-            )
             assert row_count_value >= 3, (
                 f"Expected at least 3 rows, got {row_count_value}"
             )
@@ -1173,9 +1159,6 @@ class TestConnection:
             )
             if null_count_stat:
                 null_count = null_count_stat["statistic_value"]
-                assert isinstance(null_count, (int, float)), (
-                    "Null count should be numeric"
-                )
                 assert null_count >= 1, (
                     f"Expected at least 1 null in 'name' column, got {null_count}"
                 )
