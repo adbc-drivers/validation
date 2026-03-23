@@ -1061,7 +1061,7 @@ class TestConnection:
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
-        get_statistics_table,
+        get_statistics_table: tuple[str, str, str],
     ) -> None:
         """Test GetStatistics"""
         if not driver.features.connection_get_statistics:
