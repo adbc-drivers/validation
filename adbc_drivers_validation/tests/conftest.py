@@ -82,6 +82,20 @@ def pytest_collection_modifyitems(
             item for item in items if not item.name.startswith("test_show_queries[")
         ]
 
+    # Sort tests so that we don't run the setup/teardown fixture in query.py
+    # more than once per query; this saves execution time for vendors with
+    # expensive DDL operations
+    def _sort_key(item):
+        module = item.module.__name__
+        name = item.name
+        query_name = ""
+        if hasattr(item, "callspec") and "query" in item.callspec.params:
+            query = item.callspec.params["query"]
+            query_name = query.name
+        return (module, query_name, name)
+
+    items.sort(key=_sort_key)
+
 
 @pytest.fixture(scope="session")
 def manual_test() -> None:

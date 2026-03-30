@@ -82,19 +82,31 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
 class TestQuery:
     """Tests that involve running queries."""
 
+    @pytest.fixture(scope="module")
+    def query_setup(
+        self,
+        request,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ):
+        """Run DDL for a query once across multiple subtests."""
+        with setup_connection(query, conn):
+            _setup_query(driver, conn, query)
+        yield
+
     def test_query(
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: Query,
+        query_setup: None,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
 
         sql = subquery.query()
         expected_result = subquery.expected_result()
-
-        _setup_query(driver, conn, query)
 
         bind = subquery.bind_query(driver)
         if bind:
@@ -120,13 +132,12 @@ class TestQuery:
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: Query,
+        query_setup: None,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
         sql = subquery.query()
         expected_schema = subquery.catalog_schema()
-
-        _setup_query(driver, conn, query)
 
         with conn.cursor() as cursor:
             with setup_statement(query, cursor):
@@ -139,14 +150,13 @@ class TestQuery:
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: model.Query,
+        query_setup: None,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
         expected_schema = subquery.catalog_schema()
 
         with setup_connection(query, conn):
-            _setup_query(driver, conn, query)
-
             table_name = None
             md = query.metadata()
             table_name = md.setup.drop
