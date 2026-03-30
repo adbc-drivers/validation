@@ -95,9 +95,9 @@ class TestConnection:
 
         with conn_factory() as conn:
             assert conn.adbc_current_catalog == driver.features.current_catalog
-            conn.adbc_current_catalog = driver.features.secondary_catalog  # type: ignore[invalid-assignment]
+            conn.adbc_current_catalog = driver.features.secondary_catalog  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_catalog == driver.features.secondary_catalog
-            conn.adbc_current_catalog = driver.features.current_catalog  # type: ignore[invalid-assignment]
+            conn.adbc_current_catalog = driver.features.current_catalog  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_catalog == driver.features.current_catalog
 
     def test_set_current_schema(
@@ -110,9 +110,9 @@ class TestConnection:
 
         with conn_factory() as conn:
             assert conn.adbc_current_db_schema == driver.features.current_schema
-            conn.adbc_current_db_schema = driver.features.secondary_schema  # type: ignore[invalid-assignment]
+            conn.adbc_current_db_schema = driver.features.secondary_schema  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_db_schema == driver.features.secondary_schema
-            conn.adbc_current_db_schema = driver.features.current_schema  # type: ignore[invalid-assignment]
+            conn.adbc_current_db_schema = driver.features.current_schema  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_db_schema == driver.features.current_schema
 
     def test_get_info(
