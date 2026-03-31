@@ -19,6 +19,8 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import time
+
 import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
@@ -91,8 +93,20 @@ class TestQuery:
         query: Query,
     ):
         """Run DDL for a query once across multiple subtests."""
-        with setup_connection(query, conn):
-            _setup_query(driver, conn, query)
+        for attempt in range(10):
+            try:
+                with setup_connection(query, conn):
+                    _setup_query(driver, conn, query)
+            except adbc_driver_manager.Error as e:
+                if driver.is_retryable(e):
+                    delay = min(60, 2 ** (attempt + 2))
+                    print("backing off and trying again after", delay, "seconds")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise
+            else:
+                break
         yield
 
     def test_query(

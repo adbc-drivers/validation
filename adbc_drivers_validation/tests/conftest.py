@@ -89,10 +89,12 @@ def pytest_collection_modifyitems(
         module = item.module.__name__
         name = item.name
         query_name = ""
+        variant = ""
         if hasattr(item, "callspec") and "query" in item.callspec.params:
             query = item.callspec.params["query"]
             query_name = query.name
-        return (module, query_name, name)
+            variant = query.metadata().tags.variant or ""
+        return (module, variant, query_name, name)
 
     items.sort(key=_sort_key)
 
