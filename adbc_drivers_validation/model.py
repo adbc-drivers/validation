@@ -329,6 +329,14 @@ class DriverQuirks(abc.ABC):
         """
         ...
 
+    def is_retryable(self, error: Exception) -> bool:
+        """
+        Check if the error should be retried.
+
+        Used during some DDL operations.
+        """
+        return False
+
     def qualify_temp_table(
         self, cursor: adbc_driver_manager.dbapi.Cursor, name: str
     ) -> str:
