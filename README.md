@@ -16,6 +16,10 @@
 
 # Driver Validation Suite
 
+[![GitHub branch check runs](https://img.shields.io/github/check-runs/adbc-drivers/validation/main)](https://github.com/adbc-drivers/validation/actions)
+[![GitHub License](https://img.shields.io/github/license/adbc-drivers/validation)](LICENSE.txt)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/adbc-drivers/validation)
+
 A reusable, pluggable test suite for ADBC drivers written with Python and
 [pytest](https://docs.pytest.org/en/stable/).  The test suite exercises
 various ADBC features and different data types, generating a table of
