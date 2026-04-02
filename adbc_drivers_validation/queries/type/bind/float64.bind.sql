@@ -1,1 +1,0 @@
-INSERT INTO test_float64 VALUES ($1)

@@ -133,3 +133,7 @@ partial-support = true
     assert query.query.query().strip() == "SELECT 1"
     assert query.query.expected_schema() == pyarrow.schema([("$0", pyarrow.int32())])
     assert query.query.expected_result().to_pylist() == [{"$0": 2}]
+
+
+def test_load_queries():
+    model.base_query_set()
