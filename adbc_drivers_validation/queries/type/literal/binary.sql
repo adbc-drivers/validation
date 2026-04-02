@@ -1,1 +1,0 @@
-SELECT from_hex('e38193e38293e381abe381a1e381afe38081e4b896e7958cefbc81') AS res
