@@ -18,6 +18,7 @@ import dataclasses
 import difflib
 import typing
 
+import plpygis
 import pyarrow
 import whenever
 
@@ -77,7 +78,9 @@ def make_nullable(value: T) -> T:
             raise TypeError(f"Unsupported type: {type(value)}")
 
 
-def scalar_to_py_smart(value: pyarrow.Scalar) -> typing.Any:
+def scalar_to_py_smart(
+    value: pyarrow.Scalar, extension_name: str | None = None
+) -> typing.Any:
     """
     Convert a PyArrow Scalar to a Python object.
 
@@ -153,6 +156,12 @@ def scalar_to_py_smart(value: pyarrow.Scalar) -> typing.Any:
             return None
         else:
             return f"{mdn[0]}M{mdn[1]}d{mdn[2]}ns"
+    elif isinstance(value, pyarrow.BinaryScalar) and extension_name == "geoarrow.wkb":
+        v = value.as_py()
+        if v is None:
+            return None
+        else:
+            return plpygis.Geometry(v).ewkt
 
     return value.as_py()
 
@@ -164,8 +173,16 @@ def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
         row = {}
         for col_idx in range(table.num_columns):
             value = table.column(col_idx)[row_idx]
-            col_name = table.schema[col_idx].name
-            row[col_name] = scalar_to_py_smart(value)
+            field = table.schema[col_idx]
+            col_name = field.name
+            ext = (
+                field.metadata.get(b"ARROW:extension:name", None)
+                if field.metadata
+                else None
+            )
+            if ext:
+                ext = ext.decode()
+            row[col_name] = scalar_to_py_smart(value, extension_name=ext)
         rows.append(row)
     return rows
 
