@@ -22,6 +22,7 @@ dependencies = [
   "bidict>=0.23.1,<1.0.0",
   "duckdb>=1.4.1,<2",
   "jinja2>=3.1.6,<4",
+  "plpygis>=0.6.1,<0.7",
   "pyarrow>=23.0.0,<24",
   "pydantic>=2.12.0,<3",
   "pytest>=9.0.0,<10",
