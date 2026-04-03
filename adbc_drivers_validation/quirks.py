@@ -54,7 +54,7 @@ def split_statement(statement: str, dialect: str | None = None) -> list[str]:
     statements = []
     current = []
 
-    def flush():
+    def flush() -> None:
         nonlocal statements
         nonlocal current
         v = "\n".join(current).strip()

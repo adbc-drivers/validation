@@ -20,7 +20,7 @@ import pytest
 import adbc_drivers_validation.compare as compare
 
 
-def test_compare_fields():
+def test_compare_fields() -> None:
     f1 = pyarrow.field("a", pyarrow.int32(), nullable=True)
     f2 = pyarrow.field("b", pyarrow.int32(), nullable=True)
     f3 = pyarrow.field("a", pyarrow.int64(), nullable=True)
@@ -58,7 +58,7 @@ def test_compare_fields():
         compare.compare_fields(f1, f6)
 
 
-def test_compare_schemas_nullability():
+def test_compare_schemas_nullability() -> None:
     # Should ignore nullability
     s1 = pyarrow.schema([pyarrow.field("a", pyarrow.int32(), nullable=True)])
     s2 = pyarrow.schema([pyarrow.field("a", pyarrow.int32(), nullable=False)])
