@@ -26,7 +26,9 @@ import pytest
 from adbc_drivers_validation import model
 
 
-def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
+def generate_tests(
+    all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
+) -> None:
     """Parameterize the tests in this module for the given driver."""
     marks = []
     combinations = []

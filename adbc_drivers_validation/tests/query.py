@@ -20,6 +20,7 @@ pytest_generate_tests hook, call generate_tests.
 """
 
 import time
+import typing
 
 import adbc_driver_manager.dbapi
 import pyarrow
@@ -35,7 +36,9 @@ from adbc_drivers_validation.utils import (
 )
 
 
-def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
+def generate_tests(
+    all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
+) -> None:
     """Parameterize the tests in this module for the given driver."""
     combinations = []
 
@@ -90,11 +93,11 @@ class TestQuery:
     @pytest.fixture(scope="module")
     def query_setup(
         self,
-        request,
+        request: pytest.FixtureRequest,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: Query,
-    ):
+    ) -> typing.Generator[None, None, None]:
         """Run DDL for a query once across multiple subtests."""
         for attempt in range(10):
             try:

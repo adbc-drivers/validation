@@ -259,7 +259,9 @@ class ValidationReport:
         )
 
 
-def render_to(sink: Path, template, kwargs) -> None:
+def render_to(
+    sink: Path, template: jinja2.Template, kwargs: dict[str, typing.Any]
+) -> None:
     rendered = render_part(template, kwargs)
     sink.parent.mkdir(parents=True, exist_ok=True)
     with sink.open("w") as f:
@@ -268,7 +270,7 @@ def render_to(sink: Path, template, kwargs) -> None:
     print("Generated", sink)
 
 
-def render_part(template, kwargs) -> str:
+def render_part(template: jinja2.Template, kwargs: dict[str, typing.Any]) -> str:
     rendered = template.render(**kwargs)
     # Eliminate trailing whitespace from lines
     lines = [line.rstrip() for line in rendered.splitlines()]

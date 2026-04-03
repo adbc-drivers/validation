@@ -38,9 +38,9 @@ from adbc_drivers_validation.utils import (
 
 def generate_tests(
     all_quirks: list[model.DriverQuirks],
-    metafunc,
+    metafunc: pytest.Metafunc,
     *,
-    ingest_mode_queries={"ingest/string"},
+    ingest_mode_queries: set[str] = {"ingest/string"},
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
     param_string = ""
@@ -278,7 +278,10 @@ class TestIngest:
         )
 
     def test_replace(
-        self, driver, conn: adbc_driver_manager.dbapi.Connection, query: Query
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.IngestQuery)
