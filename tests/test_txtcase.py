@@ -18,7 +18,7 @@ import pytest
 from adbc_drivers_validation import txtcase
 
 
-def test_one_part():
+def test_one_part() -> None:
     contents = """
 // part: data
 data"""
@@ -26,7 +26,7 @@ data"""
     assert t._parts == {"data": "data"}
 
 
-def test_one_part_multiline():
+def test_one_part_multiline() -> None:
     contents = """
 // part: data
 data
@@ -35,7 +35,7 @@ data
     assert t._parts == {"data": "data\n    foobar"}
 
 
-def test_one_part_comments():
+def test_one_part_comments() -> None:
     contents = """
 // This is the license header
 // part: data
@@ -45,7 +45,7 @@ SELECT 1"""
     assert t._parts == {"data": "-- This comment is part of the data itself\nSELECT 1"}
 
 
-def test_two_part():
+def test_two_part() -> None:
     contents = """
 // This is the license header
 // part: query
@@ -60,7 +60,7 @@ SELECT 1
     }
 
 
-def test_get_part_query():
+def test_get_part_query() -> None:
     contents = """
 // part: bind_query
 -- This is the bind query
@@ -84,7 +84,7 @@ SELECT 'setup_query'
     assert t.get_part("setup_query") == expected
 
 
-def test_get_part_schema():
+def test_get_part_schema() -> None:
     contents = """
 // part: bind_schema
 {
@@ -132,7 +132,7 @@ def test_get_part_schema():
     assert t.get_part("input_schema") == expected
 
 
-def test_get_part_table():
+def test_get_part_table() -> None:
     contents = """
 // part: bind
 {"res": 1}
@@ -158,7 +158,7 @@ def test_get_part_table():
     assert t.get_part("input", schema) == expected
 
 
-def test_get_part_invalid():
+def test_get_part_invalid() -> None:
     contents = """
 // part: query
 -- This is the query

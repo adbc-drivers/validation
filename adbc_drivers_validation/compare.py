@@ -300,7 +300,7 @@ def compare_tables(
     expected: pyarrow.Table,
     actual: pyarrow.Table,
     meta: query_metadata.QueryMetadata | None = None,
-):
+) -> None:
     """Compare two Arrow tables for equality."""
     expected = make_nullable(expected)
     actual = make_nullable(actual)

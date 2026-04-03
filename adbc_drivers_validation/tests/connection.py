@@ -89,7 +89,7 @@ class TestConnection:
         self,
         driver: model.DriverQuirks,
         conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
-    ):
+    ) -> None:
         if not driver.features.connection_set_current_catalog:
             pytest.skip("not implemented")
 
@@ -104,7 +104,7 @@ class TestConnection:
         self,
         driver: model.DriverQuirks,
         conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
-    ):
+    ) -> None:
         if not driver.features.connection_set_current_schema:
             pytest.skip("not implemented")
 

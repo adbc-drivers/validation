@@ -22,7 +22,7 @@ import pytest
 from adbc_drivers_validation import arrowjson
 
 
-def test_parse_int32_schema():
+def test_parse_int32_schema() -> None:
     f = io.StringIO("""
 {
     "format": "+s",
@@ -44,7 +44,7 @@ def test_parse_int32_schema():
     assert parsed_schema.field("res").nullable
 
 
-def test_parse_extension_schema():
+def test_parse_extension_schema() -> None:
     f = io.StringIO("""
 {
     "format": "+s",
@@ -71,7 +71,7 @@ def test_parse_extension_schema():
     }
 
 
-def test_parse_type_format_primitives():
+def test_parse_type_format_primitives() -> None:
     assert arrowjson.parse_type_format("n") == pyarrow.null()
     assert arrowjson.parse_type_format("b") == pyarrow.bool_()
     assert arrowjson.parse_type_format("i") == pyarrow.int32()
@@ -79,7 +79,7 @@ def test_parse_type_format_primitives():
     assert arrowjson.parse_type_format("g") == pyarrow.float64()
 
 
-def test_parse_type_format_nested():
+def test_parse_type_format_nested() -> None:
     # Simple struct
     struct_type = arrowjson.parse_type_format(
         "+s",
@@ -106,7 +106,7 @@ def test_parse_type_format_nested():
     assert fixed_list_type.list_size == 3
 
 
-def test_from_dict_simple():
+def test_from_dict_simple() -> None:
     field = arrowjson.field_from_dict(
         {"name": "test_field", "format": "i", "flags": ["nullable"]}
     )
@@ -116,7 +116,7 @@ def test_from_dict_simple():
     assert field.nullable
 
 
-def test_from_dict_nested():
+def test_from_dict_nested() -> None:
     field = arrowjson.field_from_dict(
         {
             "name": "parent",
@@ -145,7 +145,7 @@ def test_from_dict_nested():
     assert not child2.nullable
 
 
-def test_from_dict_list():
+def test_from_dict_list() -> None:
     field = arrowjson.field_from_dict(
         {
             "name": "items",
@@ -161,7 +161,7 @@ def test_from_dict_list():
     assert field.type.value_type == pyarrow.float32()
 
 
-def test_load_table_extra_fields():
+def test_load_table_extra_fields() -> None:
     schema = pyarrow.schema([pyarrow.field("a", pyarrow.int32())])
     data = [{"a": 1, "b": 2}]
     with pytest.raises(ValueError, match="Extra fields in row: {'b': 2}"):
@@ -249,7 +249,7 @@ def test_array_from_values_struct() -> None:
     assert actual == expected
 
 
-def test_parse_type_format_decimal():
+def test_parse_type_format_decimal() -> None:
     """Test decimal format parsing with various bitwidths and legacy format."""
     # Test decimal32 (precision 1-9)
     decimal32_type = arrowjson.parse_type_format("d:9,2,32")

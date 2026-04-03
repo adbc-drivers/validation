@@ -85,7 +85,7 @@ class FromEnv(BaseModel):
 
     env: str = Field(description="Environment variable to read the value from")
 
-    def __init__(self, env: str):
+    def __init__(self, env: str) -> None:
         super().__init__(env=env)
 
     def get_or_raise(self) -> str:
@@ -141,7 +141,7 @@ class DriverFeatures(BaseModel):
     quirk_get_objects_constraints_primary_normalized: bool = Field(default=False)
     quirk_get_objects_constraints_unique_normalized: bool = Field(default=False)
 
-    def __init__(self, **data: typing.Any):
+    def __init__(self, **data: typing.Any) -> None:
         super().__init__(**data)
         self._current_catalog = data.get("current_catalog")
         self._current_schema = data.get("current_schema")

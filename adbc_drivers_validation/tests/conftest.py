@@ -30,7 +30,7 @@ pytest.register_assert_rewrite("adbc_drivers_validation.tests.query")
 pytest.register_assert_rewrite("adbc_drivers_validation.tests.statement")
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser) -> None:
     parser.addoption("--repl", action="store_true", default=False)
     parser.addoption("--show-queries", action="store_true", default=False)
 

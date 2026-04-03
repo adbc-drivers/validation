@@ -20,7 +20,7 @@ import pytest
 from adbc_drivers_validation import model, query_metadata
 
 
-def test_txtcase_empty(tmp_path: Path):
+def test_txtcase_empty(tmp_path: Path) -> None:
     with (tmp_path / "query.txtcase").open("w") as f:
         f.write("\n")
 
@@ -28,7 +28,7 @@ def test_txtcase_empty(tmp_path: Path):
         model.QuerySet.load(tmp_path)
 
 
-def test_txtcase_select(tmp_path: Path):
+def test_txtcase_select(tmp_path: Path) -> None:
     with (tmp_path / "query.txtcase").open("w") as f:
         f.write(
             """
@@ -70,7 +70,7 @@ SELECT 1
     assert query.query.expected_result().to_pylist() == [{"$0": 1}]
 
 
-def test_txtcase_override(tmp_path: Path):
+def test_txtcase_override(tmp_path: Path) -> None:
     (tmp_path / "base").mkdir()
     (tmp_path / "over").mkdir()
 
@@ -135,5 +135,5 @@ partial-support = true
     assert query.query.expected_result().to_pylist() == [{"$0": 2}]
 
 
-def test_load_queries():
+def test_load_queries() -> None:
     model.base_query_set()
