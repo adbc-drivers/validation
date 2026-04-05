@@ -41,4 +41,5 @@ dev = [
 ]
 
 [tool.ruff.lint]
-extend-select = ["I"]
+extend-select = ["ANN", "I"]
+ignore = ["ANN401"]

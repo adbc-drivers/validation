@@ -149,7 +149,11 @@ def execute_query_without_prepare(
         raise
 
 
-def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
+def arrow_type_name(
+    arrow_type: pyarrow.DataType,
+    metadata: dict[bytes, bytes] | None = None,
+    show_type_parameters: bool = False,
+) -> str:
     """Render the name of an Arrow type in a friendly way."""
     # Special handling (sometimes we want params, sometimes not)
     if metadata and (ext := metadata.get(b"ARROW:extension:name")):

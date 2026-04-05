@@ -31,7 +31,9 @@ from adbc_drivers_validation import compare, model
 from adbc_drivers_validation.utils import scoped_trace
 
 
-def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
+def generate_tests(
+    all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
+) -> None:
     """Parameterize the tests in this module for the given driver."""
     combinations = []
     for quirks in all_quirks:
@@ -311,7 +313,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = conn.adbc_get_objects(depth="tables").read_all().to_pylist()
@@ -328,7 +330,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -351,7 +353,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -374,7 +376,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -397,7 +399,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -418,7 +420,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
         columns = [
@@ -446,7 +448,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
@@ -470,7 +472,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -498,7 +500,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -527,7 +529,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -557,7 +559,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -589,7 +591,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -621,7 +623,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -682,7 +684,7 @@ class TestConnection:
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
-    ):
+    ) -> typing.Generator[tuple[str | None, str | None, str], None, None]:
         with conn.cursor() as cursor:
             # XXX: randomize table name since in some environments, there may
             # be leftover tables from other runs in different schemas

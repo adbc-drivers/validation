@@ -45,7 +45,7 @@ class TxtCase:
             return cls.loadf(path, source)
 
     @classmethod
-    def loadf(cls, path: str | Path, source) -> Self:
+    def loadf(cls, path: str | Path, source: typing.TextIO) -> Self:
         part_re = re.compile(r"^//\s*part:\s*(\w+)\s*[\s-]*$")
 
         parts = {}

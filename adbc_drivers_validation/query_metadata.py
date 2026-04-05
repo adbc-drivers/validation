@@ -14,6 +14,7 @@
 
 """Pydantic models for query metadata."""
 
+import typing
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -40,7 +41,7 @@ class ConnectionOptions(BaseModel):
 
     @field_validator("options", mode="before")
     @classmethod
-    def parse_options(cls, v):
+    def parse_options(cls, v: typing.Any) -> typing.Any:
         """Parse string values into ReversibleOption objects."""
         if not isinstance(v, dict):
             return v
@@ -66,7 +67,7 @@ class StatementOptions(BaseModel):
 
     @field_validator("options", mode="before")
     @classmethod
-    def parse_options(cls, v):
+    def parse_options(cls, v: typing.Any) -> typing.Any:
         """Parse string values into ReversibleOption objects."""
         if not isinstance(v, dict):
             return v

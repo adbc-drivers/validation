@@ -64,7 +64,12 @@ def query_table(path: Path, schema: pyarrow.Schema) -> pyarrow.Table:
         return arrowjson.load_table(f, schema)
 
 
-def try_txtcase(path: Path, fallback, parts: list[str], schema=None):
+def try_txtcase(
+    path: Path,
+    fallback: typing.Callable[..., typing.Any],
+    parts: list[str],
+    schema: pyarrow.Schema | None = None,
+) -> typing.Any:
     args = (schema,) if schema is not None else ()
     t = query_txtcase(path)
     if t is None:
@@ -179,7 +184,7 @@ class DriverFeatures(BaseModel):
             return self._secondary_catalog_schema.get_or_raise()
         return self._secondary_catalog_schema
 
-    def with_values(self, **kwargs) -> typing.Self:
+    def with_values(self, **kwargs: typing.Any) -> typing.Self:
         for key in list(kwargs.keys()):
             if key in {
                 "current_catalog",
@@ -538,7 +543,7 @@ class Query:
         parent: typing.Self | None,
         *,
         metadata_path: Path | None = None,
-        **kwargs,
+        **kwargs: typing.Any,
     ) -> typing.Self:
         params = {}
         metadata_paths = []
