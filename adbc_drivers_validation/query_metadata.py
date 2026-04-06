@@ -105,6 +105,11 @@ class TagsMetadata(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    field_type_name: str | list[str] | None = Field(
+        default=None,
+        alias="field-type-name",
+        description="The name of the type in field metadata (in the `VENDOR:type` property). Defaults to sql-type-name.",
+    )
     sql_type_name: str | None = Field(
         default=None,
         alias="sql-type-name",
@@ -138,6 +143,12 @@ class TagsMetadata(BaseModel):
         default=None,
         description="A variant name to distinguish this query from others with the same SQL type (for documentation).",
     )
+
+    def metadata_type_name(self, position: int) -> str | None:
+        """Type name used in field metadata."""
+        if isinstance(self.field_type_name, list):
+            return self.field_type_name[position]
+        return self.field_type_name or self.sql_type_name
 
 
 class QueryMetadata(BaseModel):
