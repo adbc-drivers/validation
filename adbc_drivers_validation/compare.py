@@ -230,17 +230,14 @@ def compare_fields(
     # There's no need to handle ExtensionType/BaseExtensionType here
     # explicitly.  They would have compared equal or unequal already.  This is
     # only to handle normal-types-with-invisible-extension-metadata.
-    expected_extension_name = (expected.metadata or {}).get(
-        b"ARROW:extension:name", None
-    )
-    expected_extension_metadata = (expected.metadata or {}).get(
+    expected_metadata = expected.metadata or {}
+    actual_metadata = actual.metadata or {}
+    expected_extension_name = expected_metadata.get(b"ARROW:extension:name", None)
+    expected_extension_metadata = expected_metadata.get(
         b"ARROW:extension:metadata", None
     )
-
-    actual_extension_name = (actual.metadata or {}).get(b"ARROW:extension:name", None)
-    actual_extension_metadata = (actual.metadata or {}).get(
-        b"ARROW:extension:metadata", None
-    )
+    actual_extension_name = actual_metadata.get(b"ARROW:extension:name", None)
+    actual_extension_metadata = actual_metadata.get(b"ARROW:extension:metadata", None)
 
     assert expected_extension_name == actual_extension_name, (
         f"Field extension names do not match: {path}{expected.name} ({expected_extension_name}) != {path}{actual.name} ({actual_extension_name})"
@@ -248,6 +245,14 @@ def compare_fields(
 
     assert expected_extension_metadata == actual_extension_metadata, (
         f"Field extension metadata does not match: {path}{expected.name} ({expected_extension_metadata}) != {path}{actual.name} ({actual_extension_metadata})"
+    )
+
+    # For now, allow extra metadata
+    actual_subset = {
+        key: actual_metadata[key] for key in expected_metadata if key in actual_metadata
+    }
+    assert expected_metadata == actual_subset, (
+        f"Field metadata does not match: {path}{expected.name} ({expected_metadata}) != {path}{actual.name} ({actual_metadata})"
     )
 
 
