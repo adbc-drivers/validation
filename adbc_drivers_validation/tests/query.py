@@ -26,7 +26,7 @@ import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
-from adbc_drivers_validation import compare, model
+from adbc_drivers_validation import compare, model, utils
 from adbc_drivers_validation.model import Query
 from adbc_drivers_validation.utils import (
     execute_query_without_prepare,
@@ -146,6 +146,7 @@ class TestQuery:
                     result = execute_query_without_prepare(cursor, sql)
 
         compare.compare_tables(expected_result, result, query.metadata())
+        utils.assert_field_type_name(driver, query, result.schema)
 
     def test_execute_schema(
         self,
@@ -164,6 +165,7 @@ class TestQuery:
                 schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)
+        utils.assert_field_type_name(driver, query, schema)
 
     def test_get_table_schema(
         self,
@@ -192,9 +194,12 @@ class TestQuery:
             assert table_name, "Could not determine table name"
 
             schema = conn.adbc_get_table_schema(table_name)
-            # Ignore the first column which is normally used to sort the table
-            schema = pyarrow.schema(list(schema)[1:])
-            compare.compare_schemas(expected_schema, schema)
+
+        # Ignore the first column which is normally used to sort the table
+        schema = pyarrow.schema(list(schema)[1:])
+        compare.compare_schemas(expected_schema, schema)
+
+        utils.assert_field_type_name(driver, query, schema)
 
     def test_show_queries(
         self,

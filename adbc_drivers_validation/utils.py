@@ -20,7 +20,7 @@ import adbc_driver_manager.dbapi
 import pyarrow
 
 if typing.TYPE_CHECKING:
-    from adbc_drivers_validation.model import Query
+    from adbc_drivers_validation.model import DriverQuirks, Query
 
 
 def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> None:
@@ -181,3 +181,20 @@ def arrow_type_name(
             return f"timestamp[{arrow_type.unit}] (with time zone)"
         return str(arrow_type)
     return str(arrow_type)
+
+
+def assert_field_type_name(
+    driver: "DriverQuirks", query: "Query", schema: pyarrow.Schema
+) -> None:
+    field_name = (f"{driver.name.upper()}:type").encode("utf-8")
+    if driver.features.metadata_type_name:
+        for i, field in enumerate(schema):
+            assert field.metadata is not None
+            assert field_name in field.metadata
+            assert field.metadata[field_name].decode(
+                "utf-8"
+            ) == query.metadata().tags.metadata_type_name(i)
+    else:
+        for field in schema:
+            if field.metadata is not None:
+                assert field_name not in field.metadata

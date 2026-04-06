@@ -118,6 +118,7 @@ class DriverFeatures(BaseModel):
     get_objects_constraints_foreign: bool = Field(default=False)
     get_objects_constraints_primary: bool = Field(default=False)
     get_objects_constraints_unique: bool = Field(default=False)
+    metadata_type_name: bool = Field(default=False)
     statement_bind: bool = Field(default=False)
     statement_bulk_ingest: bool = Field(default=False)
     statement_bulk_ingest_catalog: bool = Field(default=False)

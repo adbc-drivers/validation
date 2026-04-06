@@ -11,3 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import pytest
+
+# Rewrite assertions in these modules to have the friendly display
+pytest.register_assert_rewrite("adbc_drivers_validation.compare")
+pytest.register_assert_rewrite("adbc_drivers_validation.tests.connection")
+pytest.register_assert_rewrite("adbc_drivers_validation.tests.ingest")
+pytest.register_assert_rewrite("adbc_drivers_validation.tests.query")
+pytest.register_assert_rewrite("adbc_drivers_validation.tests.statement")
+pytest.register_assert_rewrite("adbc_drivers_validation.utils")

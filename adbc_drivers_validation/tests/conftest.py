@@ -22,13 +22,6 @@ import pytest
 
 from adbc_drivers_validation import model
 
-# Rewrite assertions in these modules to have the friendly display
-pytest.register_assert_rewrite("adbc_drivers_validation.compare")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.connection")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.ingest")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.query")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.statement")
-
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption("--repl", action="store_true", default=False)
