@@ -856,9 +856,11 @@ class TestIngest:
             else:
                 assert modified == -1
 
-            cursor.execute(
-                f"SELECT COUNT(*) FROM {driver.quote_identifier(table_name)}"
+            count = driver.query_override(
+                "TestIngest.test_many_columns",
+                f"SELECT COUNT(*) FROM {driver.quote_identifier(table_name)}",
             )
+            cursor.execute(count)
             result = cursor.fetchone()
             assert result is not None
             assert result[0] == num_rows

@@ -222,6 +222,10 @@ class DriverQuirks(abc.ABC):
         """
         return query_set(self.queries_paths)
 
+    def query_override(self, context: str, default: str) -> str:
+        """Override ad-hoc queries in tests without parameterized queries."""
+        return default
+
     def bind_parameter(self, index: int) -> str:
         """
         Return a bind parameter placeholder.
