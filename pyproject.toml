@@ -27,7 +27,7 @@ dependencies = [
   "pydantic>=2.12.0,<3",
   "pytest>=9.0.0,<10",
   "sqlglot>=28.5.0",
-  "whenever>=0.9.3,<0.10",
+  "whenever>=0.10.0,<0.11",
 ]
 
 [build-system]
