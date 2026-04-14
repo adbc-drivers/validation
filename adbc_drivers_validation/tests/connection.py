@@ -801,7 +801,7 @@ class TestConnection:
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
-    ):
+    ) -> typing.Generator[tuple[str | None, str | None, str], None, None]:
         """Fixture that creates a table with test data for GetStatistics tests."""
         table_name = f"statistics{secrets.token_hex(8)}"
 
