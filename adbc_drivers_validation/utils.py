@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import adbc_driver_manager.dbapi
 import pyarrow
 
 if typing.TYPE_CHECKING:
-    from adbc_drivers_validation.model import Query
+    from adbc_drivers_validation.model import DriverQuirks, Query
 
 
 def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> None:
@@ -74,6 +74,11 @@ def setup_connection(
         options[key] = value.apply
         if revert := value.revert:
             options_revert[key] = revert
+        else:
+            warnings.warn(
+                f"No revert value for connection option {key} in {query.name}, this will likely have unexpected side effects!",
+                DeprecationWarning,
+            )
 
     conn.adbc_connection.set_options(**options)
     yield
@@ -144,7 +149,11 @@ def execute_query_without_prepare(
         raise
 
 
-def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
+def arrow_type_name(
+    arrow_type: pyarrow.DataType,
+    metadata: dict[bytes, bytes] | None = None,
+    show_type_parameters: bool = False,
+) -> str:
     """Render the name of an Arrow type in a friendly way."""
     # Special handling (sometimes we want params, sometimes not)
     if metadata and (ext := metadata.get(b"ARROW:extension:name")):
@@ -172,3 +181,20 @@ def arrow_type_name(arrow_type, metadata=None, show_type_parameters=False):
             return f"timestamp[{arrow_type.unit}] (with time zone)"
         return str(arrow_type)
     return str(arrow_type)
+
+
+def assert_field_type_name(
+    driver: "DriverQuirks", query: "Query", schema: pyarrow.Schema
+) -> None:
+    field_name = (f"{driver.name.upper()}:type").encode("utf-8")
+    if driver.features.metadata_type_name:
+        for i, field in enumerate(schema):
+            assert field.metadata is not None
+            assert field_name in field.metadata
+            assert field.metadata[field_name].decode(
+                "utf-8"
+            ) == query.metadata().tags.metadata_type_name(i)
+    else:
+        for field in schema:
+            if field.metadata is not None:
+                assert field_name not in field.metadata

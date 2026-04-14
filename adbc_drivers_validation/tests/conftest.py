@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,15 +22,8 @@ import pytest
 
 from adbc_drivers_validation import model
 
-# Rewrite assertions in these modules to have the friendly display
-pytest.register_assert_rewrite("adbc_drivers_validation.compare")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.connection")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.ingest")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.query")
-pytest.register_assert_rewrite("adbc_drivers_validation.tests.statement")
 
-
-def pytest_addoption(parser):
+def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption("--repl", action="store_true", default=False)
     parser.addoption("--show-queries", action="store_true", default=False)
 
@@ -82,6 +75,22 @@ def pytest_collection_modifyitems(
             item for item in items if not item.name.startswith("test_show_queries[")
         ]
 
+    # Sort tests so that we don't run the setup/teardown fixture in query.py
+    # more than once per query; this saves execution time for vendors with
+    # expensive DDL operations
+    def _sort_key(item: pytest.Item) -> tuple[str, str, str, str]:
+        module = item.module.__name__  # type: ignore[ty:unresolved-attribute]
+        name = item.name
+        query_name = ""
+        variant = ""
+        if hasattr(item, "callspec") and "query" in item.callspec.params:  # type: ignore[ty:unresolved-attribute]
+            query: model.Query = item.callspec.params["query"]  # type: ignore[ty:unresolved-attribute]
+            query_name = query.name
+            variant = query.metadata().tags.variant or ""
+        return (module, variant, query_name, name)
+
+    items.sort(key=_sort_key)
+
 
 @pytest.fixture(scope="session")
 def manual_test() -> None:
@@ -99,7 +108,7 @@ def noci() -> None:
 
 @pytest.fixture(scope="session")
 def conn_factory(
-    request,
+    request: pytest.FixtureRequest,
     driver: model.DriverQuirks,
     driver_path: str,
 ) -> typing.Callable[[], adbc_driver_manager.dbapi.Connection]:
@@ -123,7 +132,7 @@ def conn_factory(
         else:
             stmt_kwargs[k] = v
 
-    def _factory():
+    def _factory() -> adbc_driver_manager.dbapi.Connection:
         autocommit = True
         conn = adbc_driver_manager.dbapi.connect(
             driver=driver_path,
@@ -134,10 +143,12 @@ def conn_factory(
         make_cursor = conn.cursor
 
         # Inject the default args here
-        def _cursor(*args, **kwargs) -> adbc_driver_manager.dbapi.Cursor:
+        def _cursor(
+            *args: typing.Any, **kwargs: typing.Any
+        ) -> adbc_driver_manager.dbapi.Cursor:
             return make_cursor(adbc_stmt_kwargs=stmt_kwargs)
 
-        conn.cursor = _cursor  # type: ignore[invalid-assignment]
+        conn.cursor = _cursor  # type: ignore[ty:invalid-assignment]
         return conn
 
     return _factory

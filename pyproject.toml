@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,11 +22,12 @@ dependencies = [
   "bidict>=0.23.1,<1.0.0",
   "duckdb>=1.4.1,<2",
   "jinja2>=3.1.6,<4",
+  "plpygis>=0.6.1,<0.7",
   "pyarrow>=23.0.0,<24",
   "pydantic>=2.12.0,<3",
   "pytest>=9.0.0,<10",
   "sqlglot>=28.5.0",
-  "whenever>=0.9.3,<0.10",
+  "whenever>=0.10.0,<0.11",
 ]
 
 [build-system]
@@ -35,5 +36,10 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    "ruff>=0.15.9",
     "ty>=0.0.15",
 ]
+
+[tool.ruff.lint]
+extend-select = ["ANN", "I"]
+ignore = ["ANN401"]

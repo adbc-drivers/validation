@@ -1,1 +1,0 @@
-SELECT CAST(3.14 AS REAL) AS res

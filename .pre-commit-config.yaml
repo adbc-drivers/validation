@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,6 @@ repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   rev: 8a948e557ca98afa9489998ad0b85515964df9c4  # v0.12.0
   hooks:
-    - id: ruff-check
-      name: "ruff check (isort)"
-      args: ["--select", "I", "--fix"]
     - id: ruff-check
       args: ["--fix"]
     - id: ruff-format

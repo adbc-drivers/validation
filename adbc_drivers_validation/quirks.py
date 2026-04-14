@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ def split_statement(statement: str, dialect: str | None = None) -> list[str]:
     statements = []
     current = []
 
-    def flush():
+    def flush() -> None:
         nonlocal statements
         nonlocal current
         v = "\n".join(current).strip()

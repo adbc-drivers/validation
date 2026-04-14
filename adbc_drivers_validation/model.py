@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,7 +64,12 @@ def query_table(path: Path, schema: pyarrow.Schema) -> pyarrow.Table:
         return arrowjson.load_table(f, schema)
 
 
-def try_txtcase(path: Path, fallback, parts: list[str], schema=None):
+def try_txtcase(
+    path: Path,
+    fallback: typing.Callable[..., typing.Any],
+    parts: list[str],
+    schema: pyarrow.Schema | None = None,
+) -> typing.Any:
     args = (schema,) if schema is not None else ()
     t = query_txtcase(path)
     if t is None:
@@ -85,7 +90,7 @@ class FromEnv(BaseModel):
 
     env: str = Field(description="Environment variable to read the value from")
 
-    def __init__(self, env: str):
+    def __init__(self, env: str) -> None:
         super().__init__(env=env)
 
     def get_or_raise(self) -> str:
@@ -114,6 +119,7 @@ class DriverFeatures(BaseModel):
     get_objects_constraints_foreign: bool = Field(default=False)
     get_objects_constraints_primary: bool = Field(default=False)
     get_objects_constraints_unique: bool = Field(default=False)
+    metadata_type_name: bool = Field(default=False)
     statement_bind: bool = Field(default=False)
     statement_bulk_ingest: bool = Field(default=False)
     statement_bulk_ingest_catalog: bool = Field(default=False)
@@ -142,7 +148,7 @@ class DriverFeatures(BaseModel):
     quirk_get_objects_constraints_primary_normalized: bool = Field(default=False)
     quirk_get_objects_constraints_unique_normalized: bool = Field(default=False)
 
-    def __init__(self, **data: typing.Any):
+    def __init__(self, **data: typing.Any) -> None:
         super().__init__(**data)
         self._current_catalog = data.get("current_catalog")
         self._current_schema = data.get("current_schema")
@@ -180,7 +186,7 @@ class DriverFeatures(BaseModel):
             return self._secondary_catalog_schema.get_or_raise()
         return self._secondary_catalog_schema
 
-    def with_values(self, **kwargs) -> typing.Self:
+    def with_values(self, **kwargs: typing.Any) -> typing.Self:
         for key in list(kwargs.keys()):
             if key in {
                 "current_catalog",
@@ -216,6 +222,10 @@ class DriverQuirks(abc.ABC):
         run programmatically (e.g. to generate new queries dynamically).
         """
         return query_set(self.queries_paths)
+
+    def query_override(self, context: str, default: str) -> str:
+        """Override ad-hoc queries in tests without parameterized queries."""
+        return default
 
     def bind_parameter(self, index: int) -> str:
         """
@@ -330,6 +340,14 @@ class DriverQuirks(abc.ABC):
         """
         ...
 
+    def is_retryable(self, error: Exception) -> bool:
+        """
+        Check if the error should be retried.
+
+        Used during some DDL operations.
+        """
+        return False
+
     def qualify_temp_table(
         self, cursor: adbc_driver_manager.dbapi.Cursor, name: str
     ) -> str:
@@ -407,6 +425,10 @@ class SelectQuery:
     bind_schema_path: Path | None = None
     #: Data for the bind parameters.
     bind_path: Path | None = None
+    #: Schema of the result set (when not executing a query).  For some
+    #: databases and some situations, this is different than the schema you get
+    #: when you actually execute the query.
+    catalog_schema_path: Path | None = None
 
     def setup_query(self) -> str | None:
         if not self.setup_query_path:
@@ -434,6 +456,11 @@ class SelectQuery:
 
     def expected_schema(self) -> pyarrow.Schema:
         return try_txtcase(self.expected_schema_path, query_schema, ["expected_schema"])
+
+    def catalog_schema(self) -> pyarrow.Schema:
+        if not self.catalog_schema_path:
+            return self.expected_schema()
+        return try_txtcase(self.catalog_schema_path, query_schema, ["catalog_schema"])
 
     def expected_result(self) -> pyarrow.Table:
         return try_txtcase(
@@ -522,7 +549,7 @@ class Query:
         parent: typing.Self | None,
         *,
         metadata_path: Path | None = None,
-        **kwargs,
+        **kwargs: typing.Any,
     ) -> typing.Self:
         params = {}
         metadata_paths = []
@@ -549,6 +576,8 @@ class Query:
                         "expected_schema_path": parent.query.expected_schema_path,
                         "expected_path": parent.query.expected_path,
                     }
+                    if parent.query.catalog_schema_path:
+                        params["catalog_schema_path"] = parent.query.catalog_schema_path
                     if parent.query.setup_query_path:
                         params["setup_query_path"] = parent.query.setup_query_path
                     # TODO: we also want to test with ExecuteQuery so perhaps
@@ -589,6 +618,7 @@ class Query:
             in {
                 "query_path",
                 "expected_schema_path",
+                "catalog_schema_path",
                 "expected_path",
                 "setup_query_path",
                 "bind_query_path",

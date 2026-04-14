@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 """Pydantic models for query metadata."""
 
+import typing
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -40,7 +41,7 @@ class ConnectionOptions(BaseModel):
 
     @field_validator("options", mode="before")
     @classmethod
-    def parse_options(cls, v):
+    def parse_options(cls, v: typing.Any) -> typing.Any:
         """Parse string values into ReversibleOption objects."""
         if not isinstance(v, dict):
             return v
@@ -66,7 +67,7 @@ class StatementOptions(BaseModel):
 
     @field_validator("options", mode="before")
     @classmethod
-    def parse_options(cls, v):
+    def parse_options(cls, v: typing.Any) -> typing.Any:
         """Parse string values into ReversibleOption objects."""
         if not isinstance(v, dict):
             return v
@@ -104,6 +105,11 @@ class TagsMetadata(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    field_type_name: str | list[str] | None = Field(
+        default=None,
+        alias="field-type-name",
+        description="The name of the type in field metadata (in the `VENDOR:type` property). Defaults to sql-type-name.",
+    )
     sql_type_name: str | None = Field(
         default=None,
         alias="sql-type-name",
@@ -137,6 +143,12 @@ class TagsMetadata(BaseModel):
         default=None,
         description="A variant name to distinguish this query from others with the same SQL type (for documentation).",
     )
+
+    def metadata_type_name(self, position: int) -> str | None:
+        """Type name used in field metadata."""
+        if isinstance(self.field_type_name, list):
+            return self.field_type_name[position]
+        return self.field_type_name or self.sql_type_name
 
 
 class QueryMetadata(BaseModel):

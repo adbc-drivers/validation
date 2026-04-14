@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,7 +76,9 @@ _EXPECTED_GET_STATISTICS_SCHEMA = pyarrow.schema(
 )
 
 
-def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
+def generate_tests(
+    all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
+) -> None:
     """Parameterize the tests in this module for the given driver."""
     combinations = []
     for quirks in all_quirks:
@@ -137,30 +139,30 @@ class TestConnection:
         self,
         driver: model.DriverQuirks,
         conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
-    ):
+    ) -> None:
         if not driver.features.connection_set_current_catalog:
             pytest.skip("not implemented")
 
         with conn_factory() as conn:
             assert conn.adbc_current_catalog == driver.features.current_catalog
-            conn.adbc_current_catalog = driver.features.secondary_catalog  # type: ignore[invalid-assignment]
+            conn.adbc_current_catalog = driver.features.secondary_catalog  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_catalog == driver.features.secondary_catalog
-            conn.adbc_current_catalog = driver.features.current_catalog  # type: ignore[invalid-assignment]
+            conn.adbc_current_catalog = driver.features.current_catalog  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_catalog == driver.features.current_catalog
 
     def test_set_current_schema(
         self,
         driver: model.DriverQuirks,
         conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
-    ):
+    ) -> None:
         if not driver.features.connection_set_current_schema:
             pytest.skip("not implemented")
 
         with conn_factory() as conn:
             assert conn.adbc_current_db_schema == driver.features.current_schema
-            conn.adbc_current_db_schema = driver.features.secondary_schema  # type: ignore[invalid-assignment]
+            conn.adbc_current_db_schema = driver.features.secondary_schema  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_db_schema == driver.features.secondary_schema
-            conn.adbc_current_db_schema = driver.features.current_schema  # type: ignore[invalid-assignment]
+            conn.adbc_current_db_schema = driver.features.current_schema  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_db_schema == driver.features.current_schema
 
     def test_get_info(
@@ -359,7 +361,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = conn.adbc_get_objects(depth="tables").read_all().to_pylist()
@@ -376,7 +378,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -399,7 +401,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -422,7 +424,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -445,7 +447,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -466,7 +468,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
         columns = [
@@ -494,7 +496,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = conn.adbc_get_objects(depth="columns").read_all().to_pylist()
@@ -518,7 +520,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -546,7 +548,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -575,7 +577,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -605,7 +607,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -637,7 +639,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -669,7 +671,7 @@ class TestConnection:
         self,
         conn: adbc_driver_manager.dbapi.Connection,
         driver: model.DriverQuirks,
-        get_objects_table,
+        get_objects_table: tuple[str | None, str | None, str],
     ) -> None:
         table_id = get_objects_table
         objects = (
@@ -730,7 +732,7 @@ class TestConnection:
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
-    ):
+    ) -> typing.Generator[tuple[str | None, str | None, str], None, None]:
         with conn.cursor() as cursor:
             # XXX: randomize table name since in some environments, there may
             # be leftover tables from other runs in different schemas

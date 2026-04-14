@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,13 +19,14 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
+import time
 import typing
 
 import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
-from adbc_drivers_validation import compare, model
+from adbc_drivers_validation import compare, model, utils
 from adbc_drivers_validation.model import Query
 from adbc_drivers_validation.utils import (
     execute_query_without_prepare,
@@ -35,12 +36,20 @@ from adbc_drivers_validation.utils import (
 )
 
 
-def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
+def generate_tests(
+    all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
+) -> None:
     """Parameterize the tests in this module for the given driver."""
     combinations = []
 
     for quirks in all_quirks:
         driver_param = f"{quirks.name}:{quirks.short_version}"
+
+        flags = {
+            "test_execute_schema": quirks.features.statement_execute_schema,
+            "test_get_table_schema": quirks.features.connection_get_table_schema,
+        }
+
         for query in quirks.query_set.queries.values():
             marks = []
             marks.extend(query.pytest_marks)
@@ -52,16 +61,13 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
             ):
                 marks.append(pytest.mark.skip(reason="bind not supported"))
 
-            if metafunc.definition.name in {
-                "test_execute_schema",
-                "test_get_table_schema",
-            }:
+            if metafunc.definition.name in flags:
                 if not isinstance(query.query, model.SelectQuery):
                     continue
                 if not query.name.startswith("type/select/"):
                     # There's no need to repeat this test multiple times per type
                     continue
-                if not quirks.features.statement_execute_schema:
+                if not flags[metafunc.definition.name]:
                     marks.append(pytest.mark.skip(reason="not implemented"))
             elif metafunc.definition.name == "test_query":
                 if not isinstance(query.query, model.SelectQuery):
@@ -84,19 +90,43 @@ def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
 class TestQuery:
     """Tests that involve running queries."""
 
+    @pytest.fixture(scope="module")
+    def query_setup(
+        self,
+        request: pytest.FixtureRequest,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> typing.Generator[None, None, None]:
+        """Run DDL for a query once across multiple subtests."""
+        for attempt in range(10):
+            try:
+                with setup_connection(query, conn):
+                    _setup_query(driver, conn, query)
+            except adbc_driver_manager.Error as e:
+                if driver.is_retryable(e):
+                    delay = min(60, 2 ** (attempt + 2))
+                    print("backing off and trying again after", delay, "seconds")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise
+            else:
+                break
+        yield
+
     def test_query(
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: Query,
+        query_setup: None,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
 
         sql = subquery.query()
         expected_result = subquery.expected_result()
-
-        _setup_query(driver, conn, query)
 
         bind = subquery.bind_query(driver)
         if bind:
@@ -116,59 +146,60 @@ class TestQuery:
                     result = execute_query_without_prepare(cursor, sql)
 
         compare.compare_tables(expected_result, result, query.metadata())
+        utils.assert_field_type_name(driver, query, result.schema)
 
     def test_execute_schema(
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: Query,
+        query_setup: None,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
-
         sql = subquery.query()
-        expected_schema = subquery.expected_schema()
-
-        _setup_query(driver, conn, query)
+        expected_schema = subquery.catalog_schema()
 
         with conn.cursor() as cursor:
             with setup_statement(query, cursor):
                 schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)
+        utils.assert_field_type_name(driver, query, schema)
 
     def test_get_table_schema(
         self,
         driver: model.DriverQuirks,
-        conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+        conn: adbc_driver_manager.dbapi.Connection,
         query: model.Query,
+        query_setup: None,
     ) -> None:
         subquery = query.query
+        assert isinstance(subquery, model.SelectQuery)
+        expected_schema = subquery.catalog_schema()
 
-        expected_schema = subquery.expected_schema()
+        with setup_connection(query, conn):
+            table_name = None
+            md = query.metadata()
+            table_name = md.setup.drop
+            if not table_name:
+                # XXX: rather hacky, but extract the table name from the SELECT query
+                # that would normally be executed
+                query_str = subquery.query().split()
+                for i, word in enumerate(query_str):
+                    if word.upper() == "FROM":
+                        table_name = query_str[i + 1]
+                        break
 
-        with conn_factory() as conn:
-            with setup_connection(query, conn):
-                _setup_query(driver, conn, query)
+            assert table_name, "Could not determine table name"
 
-                table_name = None
-                md = query.metadata()
-                table_name = md.setup.drop
-                if not table_name and isinstance(subquery, model.SelectQuery):
-                    # XXX: rather hacky, but extract the table name from the SELECT query
-                    # that would normally be executed
-                    query_str = subquery.query().split()
-                    for i, word in enumerate(query_str):
-                        if word.upper() == "FROM":
-                            table_name = query_str[i + 1]
-                            break
+            schema = conn.adbc_get_table_schema(table_name)
 
-                assert table_name, "Could not determine table name"
+        # Ignore the first column which is normally used to sort the table
+        schema = pyarrow.schema(list(schema)[1:])
+        compare.compare_schemas(expected_schema, schema)
 
-                schema = conn.adbc_get_table_schema(table_name)
-                # Ignore the first column which is normally used to sort the table
-                schema = pyarrow.schema(list(schema)[1:])
-                compare.compare_schemas(expected_schema, schema)
+        utils.assert_field_type_name(driver, query, schema)
 
     def test_show_queries(
         self,

@@ -1,5 +1,5 @@
 <!--
-  Copyright (c) 2025 ADBC Drivers Contributors
+  Copyright (c) 2025-2026 ADBC Drivers Contributors
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -15,6 +15,10 @@
 -->
 
 # Driver Validation Suite
+
+[![GitHub branch check runs](https://img.shields.io/github/check-runs/adbc-drivers/validation/main)](https://github.com/adbc-drivers/validation/actions)
+[![GitHub License](https://img.shields.io/github/license/adbc-drivers/validation)](LICENSE.txt)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/adbc-drivers/validation)
 
 A reusable, pluggable test suite for ADBC drivers written with Python and
 [pytest](https://docs.pytest.org/en/stable/).  The test suite exercises

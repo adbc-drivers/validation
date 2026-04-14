@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,9 +38,9 @@ from adbc_drivers_validation.utils import (
 
 def generate_tests(
     all_quirks: list[model.DriverQuirks],
-    metafunc,
+    metafunc: pytest.Metafunc,
     *,
-    ingest_mode_queries={"ingest/string"},
+    ingest_mode_queries: set[str] = {"ingest/string"},
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
     param_string = ""
@@ -278,7 +278,10 @@ class TestIngest:
         )
 
     def test_replace(
-        self, driver, conn: adbc_driver_manager.dbapi.Connection, query: Query
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
     ) -> None:
         subquery = query.query
         assert isinstance(subquery, model.IngestQuery)
@@ -853,9 +856,11 @@ class TestIngest:
             else:
                 assert modified == -1
 
-            cursor.execute(
-                f"SELECT COUNT(*) FROM {driver.quote_identifier(table_name)}"
+            count = driver.query_override(
+                "TestIngest.test_many_columns",
+                f"SELECT COUNT(*) FROM {driver.quote_identifier(table_name)}",
             )
+            cursor.execute(count)
             result = cursor.fetchone()
             assert result is not None
             assert result[0] == num_rows

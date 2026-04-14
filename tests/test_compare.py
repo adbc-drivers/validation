@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import pytest
 import adbc_drivers_validation.compare as compare
 
 
-def test_compare_fields():
+def test_compare_fields() -> None:
     f1 = pyarrow.field("a", pyarrow.int32(), nullable=True)
     f2 = pyarrow.field("b", pyarrow.int32(), nullable=True)
     f3 = pyarrow.field("a", pyarrow.int64(), nullable=True)
@@ -45,8 +45,12 @@ def test_compare_fields():
     compare.compare_fields(f4, f4)
     compare.compare_fields(f5, f5)
     compare.compare_fields(f6, f6)
+
+    # it's OK for actual to have extra metadata compared to expected, but not
+    # the other way around
     compare.compare_fields(f1, f5)
-    compare.compare_fields(f5, f1)
+    with pytest.raises(AssertionError):
+        compare.compare_fields(f5, f1)
 
     with pytest.raises(AssertionError):
         compare.compare_fields(f1, f2)
@@ -58,7 +62,34 @@ def test_compare_fields():
         compare.compare_fields(f1, f6)
 
 
-def test_compare_schemas_nullability():
+def test_compare_fields_metadata() -> None:
+    f = pyarrow.field("a", pyarrow.int32(), nullable=True, metadata={"key": "value"})
+
+    f2 = pyarrow.field("a", pyarrow.int32(), nullable=True, metadata={})
+    with pytest.raises(AssertionError):
+        compare.compare_fields(f, f2)
+
+    f2 = pyarrow.field("a", pyarrow.int32(), nullable=True, metadata={"key": "VALUE"})
+    with pytest.raises(AssertionError):
+        compare.compare_fields(f, f2)
+
+    f2 = pyarrow.field(
+        "a", pyarrow.int32(), nullable=True, metadata={"key": "value", "extra": "value"}
+    )
+    compare.compare_fields(f, f2)
+
+    # extension field is always validated
+    f2 = pyarrow.field(
+        "a",
+        pyarrow.int32(),
+        nullable=True,
+        metadata={"key": "value", "ARROW:extension:name": "value"},
+    )
+    with pytest.raises(AssertionError):
+        compare.compare_fields(f, f2)
+
+
+def test_compare_schemas_nullability() -> None:
     # Should ignore nullability
     s1 = pyarrow.schema([pyarrow.field("a", pyarrow.int32(), nullable=True)])
     s2 = pyarrow.schema([pyarrow.field("a", pyarrow.int32(), nullable=False)])

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -259,7 +259,9 @@ class ValidationReport:
         )
 
 
-def render_to(sink: Path, template, kwargs) -> None:
+def render_to(
+    sink: Path, template: jinja2.Template, kwargs: dict[str, typing.Any]
+) -> None:
     rendered = render_part(template, kwargs)
     sink.parent.mkdir(parents=True, exist_ok=True)
     with sink.open("w") as f:
@@ -268,7 +270,7 @@ def render_to(sink: Path, template, kwargs) -> None:
     print("Generated", sink)
 
 
-def render_part(template, kwargs) -> str:
+def render_part(template: jinja2.Template, kwargs: dict[str, typing.Any]) -> str:
     rendered = template.render(**kwargs)
     # Eliminate trailing whitespace from lines
     lines = [line.rstrip() for line in rendered.splitlines()]

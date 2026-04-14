@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import dataclasses
 import difflib
 import typing
 
+import plpygis
 import pyarrow
 import whenever
 
@@ -77,7 +78,9 @@ def make_nullable(value: T) -> T:
             raise TypeError(f"Unsupported type: {type(value)}")
 
 
-def scalar_to_py_smart(value: pyarrow.Scalar) -> typing.Any:
+def scalar_to_py_smart(
+    value: pyarrow.Scalar, extension_name: str | None = None
+) -> typing.Any:
     """
     Convert a PyArrow Scalar to a Python object.
 
@@ -153,6 +156,12 @@ def scalar_to_py_smart(value: pyarrow.Scalar) -> typing.Any:
             return None
         else:
             return f"{mdn[0]}M{mdn[1]}d{mdn[2]}ns"
+    elif isinstance(value, pyarrow.BinaryScalar) and extension_name == "geoarrow.wkb":
+        v = value.as_py()
+        if v is None:
+            return None
+        else:
+            return plpygis.Geometry(v).ewkt
 
     return value.as_py()
 
@@ -164,8 +173,16 @@ def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
         row = {}
         for col_idx in range(table.num_columns):
             value = table.column(col_idx)[row_idx]
-            col_name = table.schema[col_idx].name
-            row[col_name] = scalar_to_py_smart(value)
+            field = table.schema[col_idx]
+            col_name = field.name
+            ext = (
+                field.metadata.get(b"ARROW:extension:name", None)
+                if field.metadata
+                else None
+            )
+            if ext:
+                ext = ext.decode()
+            row[col_name] = scalar_to_py_smart(value, extension_name=ext)
         rows.append(row)
     return rows
 
@@ -213,17 +230,14 @@ def compare_fields(
     # There's no need to handle ExtensionType/BaseExtensionType here
     # explicitly.  They would have compared equal or unequal already.  This is
     # only to handle normal-types-with-invisible-extension-metadata.
-    expected_extension_name = (expected.metadata or {}).get(
-        b"ARROW:extension:name", None
-    )
-    expected_extension_metadata = (expected.metadata or {}).get(
+    expected_metadata = expected.metadata or {}
+    actual_metadata = actual.metadata or {}
+    expected_extension_name = expected_metadata.get(b"ARROW:extension:name", None)
+    expected_extension_metadata = expected_metadata.get(
         b"ARROW:extension:metadata", None
     )
-
-    actual_extension_name = (actual.metadata or {}).get(b"ARROW:extension:name", None)
-    actual_extension_metadata = (actual.metadata or {}).get(
-        b"ARROW:extension:metadata", None
-    )
+    actual_extension_name = actual_metadata.get(b"ARROW:extension:name", None)
+    actual_extension_metadata = actual_metadata.get(b"ARROW:extension:metadata", None)
 
     assert expected_extension_name == actual_extension_name, (
         f"Field extension names do not match: {path}{expected.name} ({expected_extension_name}) != {path}{actual.name} ({actual_extension_name})"
@@ -231,6 +245,14 @@ def compare_fields(
 
     assert expected_extension_metadata == actual_extension_metadata, (
         f"Field extension metadata does not match: {path}{expected.name} ({expected_extension_metadata}) != {path}{actual.name} ({actual_extension_metadata})"
+    )
+
+    # For now, allow extra metadata
+    actual_subset = {
+        key: actual_metadata[key] for key in expected_metadata if key in actual_metadata
+    }
+    assert expected_metadata == actual_subset, (
+        f"Field metadata does not match: {path}{expected.name} ({expected_metadata}) != {path}{actual.name} ({actual_metadata})"
     )
 
 
@@ -283,7 +305,7 @@ def compare_tables(
     expected: pyarrow.Table,
     actual: pyarrow.Table,
     meta: query_metadata.QueryMetadata | None = None,
-):
+) -> None:
     """Compare two Arrow tables for equality."""
     expected = make_nullable(expected)
     actual = make_nullable(actual)

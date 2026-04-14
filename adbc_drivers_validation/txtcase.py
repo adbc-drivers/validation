@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ class TxtCase:
             return cls.loadf(path, source)
 
     @classmethod
-    def loadf(cls, path: str | Path, source) -> Self:
+    def loadf(cls, path: str | Path, source: typing.TextIO) -> Self:
         part_re = re.compile(r"^//\s*part:\s*(\w+)\s*[\s-]*$")
 
         parts = {}
@@ -92,7 +92,7 @@ class TxtCase:
 
         if part == "metadata":
             return tomllib.loads(value)
-        if part in {"bind_schema", "expected_schema", "input_schema"}:
+        if part in {"bind_schema", "expected_schema", "catalog_schema", "input_schema"}:
             return arrowjson.loads_schema(value)
         elif part in {"bind_query", "query", "setup_query"}:
             return value

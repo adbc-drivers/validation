@@ -1,5 +1,5 @@
 <!--
-  Copyright (c) 2025 ADBC Drivers Contributors
+  Copyright (c) 2025-2026 ADBC Drivers Contributors
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -26,6 +26,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Don't cram multiple shell commands in one attempt as it forces me to manually review every time.
 - Include license headers in txtcase files.
 - When generating query metadata, make sure to define sql-type-name. Again, research what the right name for the particular vendor is.
+- You are absolutely forbidden from committing or staging changes unless explicitly requested.
+- At the end of a task, make sure the following pass:
+
+  ```
+  # Run tests
+  uv run pytest -vs
+  # Format the code
+  pre-commit run --all-files
+  # Check types
+  uv run ty check
+  ```
+- Clean up temporary/test files you create after using them, instead of leaving
 
 ## Architecture Overview
 

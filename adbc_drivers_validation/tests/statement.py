@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ADBC Drivers Contributors
+# Copyright (c) 2025-2026 ADBC Drivers Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,9 @@ import pytest
 from adbc_drivers_validation import model
 
 
-def generate_tests(all_quirks: list[model.DriverQuirks], metafunc) -> None:
+def generate_tests(
+    all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
+) -> None:
     """Parameterize the tests in this module for the given driver."""
     marks = []
     combinations = []
