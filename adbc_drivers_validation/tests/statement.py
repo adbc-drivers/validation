@@ -35,6 +35,13 @@ def generate_tests(
 
     for quirks in all_quirks:
         driver_param = f"{quirks.name}:{quirks.short_version}"
+
+        if (
+            metafunc.definition.name == "test_execute_schema"
+            and not quirks.features.statement_execute_schema
+        ):
+            marks.append(pytest.mark.skip("execute_schema not supported"))
+
         if (
             metafunc.definition.name == "test_parameter_execute"
             and not quirks.features.statement_bind
@@ -72,6 +79,32 @@ def generate_tests(
 
 
 class TestStatement:
+    @pytest.fixture(scope="module")
+    def sample_table(
+        self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
+    ) -> str:
+        table_name = "sample_table"
+        quoted_name = driver.quote_identifier(table_name)
+        with conn.cursor() as cursor:
+            driver.try_drop_table(cursor, table_name=table_name)
+
+            query = f"CREATE TABLE {quoted_name} (id INT, value VARCHAR)"
+            query = driver.query_override("TestStatement.sample_table", query)
+            cursor.execute(query)
+
+        return quoted_name
+
+    def test_execute_schema_noalias(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        sample_table: str,
+    ) -> None:
+        # Regression test for https://github.com/adbc-drivers/mssql/issues/7
+        with conn.cursor() as cursor:
+            schema = cursor.adbc_execute_schema(f"SELECT id + 1 FROM {sample_table}")
+        assert len(schema) == 1
+
     def test_parameter_execute(
         self,
         driver: model.DriverQuirks,
