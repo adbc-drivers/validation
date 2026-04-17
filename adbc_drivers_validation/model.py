@@ -542,6 +542,33 @@ class Query:
             marks.append(pytest.mark.xfail(reason=broken_vendor))
         return marks
 
+    def lint(self) -> None:
+        """Check for common issues with the test case definition."""
+        if "must-test-null-values" in self.metadata().ignore_lints:
+            return
+        elif self.name.startswith("ingest/"):
+            assert isinstance(self.query, IngestQuery)
+            data = self.query.input()
+            schema = pyarrow.schema(list(data.schema)[1:])
+            data = pyarrow.table(data.columns[1:], schema=schema)
+        elif self.name.startswith("type/bind"):
+            assert isinstance(self.query, SelectQuery)
+            data = self.query.bind_data()
+            schema = pyarrow.schema(list(data.schema)[1:])
+            data = pyarrow.table(data.columns[1:], schema=schema)
+        elif self.name.startswith("type/literal"):
+            return
+        elif self.name.startswith("type/select"):
+            assert isinstance(self.query, SelectQuery)
+            data = self.query.expected_result()
+        else:
+            raise ValueError(f"Unknown query type for query `{self.name}`")
+
+        for field, column in zip(data.schema, data.columns):
+            assert column.null_count > 0, (
+                f"Column `{field.name}` ({field.type}) does not test NULL values!"
+            )
+
     @classmethod
     def merge(
         cls,

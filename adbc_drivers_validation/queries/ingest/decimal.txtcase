@@ -56,3 +56,4 @@ sql-type-name = "NUMERIC"
 {"idx": 2, "value": "-123.45"}
 {"idx": 3, "value": "9999999.99"}
 {"idx": 4, "value": "-9999999.99"}
+{"idx": 5, "value": null}

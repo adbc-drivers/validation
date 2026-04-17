@@ -158,7 +158,12 @@ class QueryMetadata(BaseModel):
     or in a .txtcase file under the '// part: metadata' section.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_by_alias=True,
+        validate_by_name=True,
+    )
 
     hide: bool = Field(
         default=False,
@@ -188,4 +193,9 @@ class QueryMetadata(BaseModel):
     tags: TagsMetadata = Field(
         default_factory=TagsMetadata,
         description="Tags for documentation generation.",
+    )
+    ignore_lints: list[str] = Field(
+        default_factory=list,
+        alias="ignore-lints",
+        description="List of lints to ignore for this query.",
     )

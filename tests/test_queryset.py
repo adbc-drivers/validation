@@ -137,3 +137,17 @@ partial-support = true
 
 def test_load_queries() -> None:
     model.base_query_set()
+
+
+def test_queries_quality(subtests: pytest.Subtests) -> None:
+    # Lint quality of tests
+
+    # this is also checked at runtime (which we have to do to catch
+    # overrides), but this helps to catch things early
+    for query in model.base_query_set().queries.values():
+        with subtests.test(name=query.name):
+            query.lint()
+
+
+def test_query_lint() -> None:
+    pass

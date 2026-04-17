@@ -58,3 +58,4 @@ sql-type-name = "REAL"
 {"idx": 4, "value": -16777216}
 {"idx": 5, "value": 3.4028235e38}
 {"idx": 6, "value": -3.4028235e38}
+{"idx": 7, "value": null}
