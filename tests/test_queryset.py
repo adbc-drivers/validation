@@ -147,7 +147,3 @@ def test_queries_quality(subtests: pytest.Subtests) -> None:
     for query in model.base_query_set().queries.values():
         with subtests.test(name=query.name):
             query.lint()
-
-
-def test_query_lint() -> None:
-    pass
