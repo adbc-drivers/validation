@@ -16,6 +16,7 @@ import pytest
 
 # Rewrite assertions in these modules to have the friendly display
 pytest.register_assert_rewrite("adbc_drivers_validation.compare")
+pytest.register_assert_rewrite("adbc_drivers_validation.model")
 pytest.register_assert_rewrite("adbc_drivers_validation.tests.connection")
 pytest.register_assert_rewrite("adbc_drivers_validation.tests.ingest")
 pytest.register_assert_rewrite("adbc_drivers_validation.tests.query")

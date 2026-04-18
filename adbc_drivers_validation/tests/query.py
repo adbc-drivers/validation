@@ -115,6 +115,13 @@ class TestQuery:
                 break
         yield
 
+    def test_lint_query(
+        self,
+        driver: model.DriverQuirks,
+        query: Query,
+    ) -> None:
+        query.lint()
+
     def test_query(
         self,
         driver: model.DriverQuirks,

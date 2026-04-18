@@ -54,3 +54,4 @@ sql-type-name = "SMALLINT"
 {"idx": 0, "value": 0}
 {"idx": 1, "value": 32767}
 {"idx": 2, "value": -32768}
+{"idx": 3, "value": null}

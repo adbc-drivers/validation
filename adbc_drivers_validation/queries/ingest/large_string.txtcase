@@ -56,6 +56,7 @@ sql-type-name = "VARCHAR"
 {"idx": 2, "value": "Special chars: !@#$%^&*()_+-=[]{}|;:,.<>?/\"\\"}
 {"idx": 3, "value": "Unicode: こんにちは, 世界!"}
 {"idx": 4, "value": "A very long string that tests the limits of string handling in various systems. This string is intentionally verbose to ensure that databases can properly handle longer text values without truncation or other issues."}
+{"idx": 5, "value": null}
 
 // part: expected_schema
 

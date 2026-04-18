@@ -54,3 +54,4 @@ sql-type-name = "BIGINT"
 {"idx": 0, "value": 0}
 {"idx": 1, "value": 9223372036854775807}
 {"idx": 2, "value": -9223372036854775808}
+{"idx": 3, "value": null}
