@@ -150,6 +150,13 @@ class TestConnection:
             conn.adbc_current_catalog = driver.features.current_catalog  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_catalog == driver.features.current_catalog
 
+            with pytest.raises(adbc_driver_manager.Error) as excinfo:
+                conn.adbc_current_catalog = "thiscatalogdoesnotexist"
+            assert (
+                excinfo.value.status_code
+                == adbc_driver_manager.AdbcStatusCode.NOT_FOUND
+            )
+
     def test_set_current_schema(
         self,
         driver: model.DriverQuirks,
@@ -164,6 +171,13 @@ class TestConnection:
             assert conn.adbc_current_db_schema == driver.features.secondary_schema
             conn.adbc_current_db_schema = driver.features.current_schema  # type: ignore[ty:invalid-assignment]
             assert conn.adbc_current_db_schema == driver.features.current_schema
+
+            with pytest.raises(adbc_driver_manager.Error) as excinfo:
+                conn.adbc_current_db_schema = "thisschemadoesnotexist"
+            assert (
+                excinfo.value.status_code
+                == adbc_driver_manager.AdbcStatusCode.NOT_FOUND
+            )
 
     def test_get_info(
         self,
@@ -1226,6 +1240,50 @@ class TestConnection:
             db_schema_filter=driver.features.secondary_schema,
         )
         assert len(schema) == 2
+
+    def test_unknown_option(
+        self,
+        subtests: pytest.Subtests,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        # Regression test: ensure get(unknown) is NOT_FOUND, set(unknown) is NOT_IMPLEMENTED
+        with conn.cursor() as cursor:
+            for handle in [
+                conn.adbc_database,
+                conn.adbc_connection,
+                cursor.adbc_statement,
+            ]:
+                with subtests.test(name=handle.__class__.__name__):
+                    for getter in (
+                        "get_option",
+                        "get_option_int",
+                        "get_option_float",
+                        "get_option_bytes",
+                    ):
+                        with pytest.raises(conn.ProgrammingError) as excinfo:
+                            getattr(handle, getter)("this_option_does_not_exist")
+                        assert (
+                            excinfo.value.status_code
+                            == adbc_driver_manager.AdbcStatusCode.NOT_FOUND
+                        )
+
+                    for v in [
+                        "value",
+                        4,
+                        4.0,
+                        b"value",
+                    ]:
+                        with pytest.raises(conn.NotSupportedError) as excinfo:
+                            handle.set_options(
+                                **{
+                                    "this_option_does_not_exist": v,
+                                }
+                            )
+                        assert (
+                            excinfo.value.status_code
+                            == adbc_driver_manager.AdbcStatusCode.NOT_IMPLEMENTED
+                        )
 
     def test_repl(
         self,
