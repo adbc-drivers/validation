@@ -18,6 +18,7 @@ import warnings
 
 import adbc_driver_manager.dbapi
 import pyarrow
+import pytest
 
 if typing.TYPE_CHECKING:
     from adbc_drivers_validation.model import DriverQuirks, Query
@@ -198,3 +199,55 @@ def assert_field_type_name(
         for field in schema:
             if field.metadata is not None:
                 assert field_name not in field.metadata
+
+
+def generate_tests_by_marks(
+    all_quirks: list["DriverQuirks"], metafunc: pytest.Metafunc
+) -> bool:
+    """
+    Parameterize tests for a given driver using marks.
+
+    Instead of adding logic to generate_tests, add
+    ``@pytest.mark.requires_features`` to have the test be automatically
+    parameterized and skipped (if needed).
+
+    Returns
+    -------
+    True if the test had marks and was parameterized.
+    """
+
+    feature_marks = [
+        mark
+        for mark in metafunc.definition.iter_markers()
+        if mark.name == "requires_features"
+    ]
+    if not feature_marks:
+        return False
+
+    features = set()
+    for mark in feature_marks:
+        for feature in mark.args[0]:
+            features.add(feature)
+
+    combinations = []
+    for quirks in all_quirks:
+        driver_param = f"{quirks.name}:{quirks.short_version}"
+        additional_marks = []
+        f = quirks.features
+        for feature in features:
+            fv = getattr(f, feature)
+            if fv is False or fv is None:
+                additional_marks.append(
+                    pytest.mark.skip(reason=f"{feature} not supported")
+                )
+                break
+        combinations.append(
+            pytest.param(driver_param, id=driver_param, marks=additional_marks)
+        )
+    metafunc.parametrize(
+        "driver",
+        combinations,
+        scope="module",
+        indirect=["driver"],
+    )
+    return True

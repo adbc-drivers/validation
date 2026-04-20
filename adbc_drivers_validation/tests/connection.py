@@ -27,7 +27,7 @@ import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
-from adbc_drivers_validation import compare, model
+from adbc_drivers_validation import compare, model, utils
 from adbc_drivers_validation.utils import scoped_trace
 
 # Expected schema for GetStatistics (ADBC spec)
@@ -80,6 +80,9 @@ def generate_tests(
     all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
+    if utils.generate_tests_by_marks(all_quirks, metafunc):
+        return
+
     combinations = []
     for quirks in all_quirks:
         driver_param = f"{quirks.name}:{quirks.short_version}"
@@ -101,9 +104,6 @@ def generate_tests(
             "test_get_objects_"
         ):
             marks.append(pytest.mark.xfail(reason="not implemented"))
-        elif metafunc.definition.name == "test_get_statistics":
-            if not f.connection_get_statistics:
-                marks.append(pytest.mark.skip(reason="not implemented"))
 
         combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
     metafunc.parametrize(
@@ -1068,6 +1068,7 @@ class TestConnection:
         else:
             assert constraints[1]["constraint_column_names"] == ["c", "b"]
 
+    @pytest.mark.requires_features(["connection_get_statistics"])
     def test_get_statistics(
         self,
         driver: model.DriverQuirks,
@@ -1164,6 +1165,67 @@ class TestConnection:
                 assert null_count >= 1, (
                     f"Expected at least 1 null in 'name' column, got {null_count}"
                 )
+
+    @pytest.mark.requires_features(["connection_get_table_schema"])
+    def test_get_table_schema_not_found(
+        self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
+    ) -> None:
+        with pytest.raises(conn.ProgrammingError) as excinfo:
+            conn.adbc_get_table_schema("test_get_table_schema_not_found")
+
+        assert excinfo.value.status_code == adbc_driver_manager.AdbcStatusCode.NOT_FOUND
+
+    @pytest.mark.requires_features(
+        ["connection_get_table_schema", "secondary_catalog", "secondary_catalog_schema"]
+    )
+    def test_get_table_schema_catalog(
+        self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
+    ) -> None:
+        quoted_table = driver.quote_identifier(
+            driver.features.secondary_catalog,
+            driver.features.secondary_catalog_schema,
+            "test_get_table_schema_catalog",
+        )
+        q = f"CREATE TABLE {quoted_table} (spam INT, eggs VARCHAR)"
+        q = driver.query_override("TestConnection.test_get_table_schema_catalog", q)
+        with conn.cursor() as cursor:
+            driver.try_drop_table(
+                cursor,
+                table_name="test_get_table_schema_catalog",
+                catalog_name=driver.features.secondary_catalog,
+                schema_name=driver.features.secondary_catalog_schema,
+            )
+            cursor.execute(q)
+
+        schema = conn.adbc_get_table_schema(
+            "test_get_table_schema_catalog",
+            catalog_filter=driver.features.secondary_catalog,
+            db_schema_filter=driver.features.secondary_catalog_schema,
+        )
+        assert len(schema) == 2
+
+    @pytest.mark.requires_features(["connection_get_table_schema", "secondary_schema"])
+    def test_get_table_schema_schema(
+        self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
+    ) -> None:
+        quoted_table = driver.quote_identifier(
+            driver.features.secondary_schema, "test_get_table_schema_schema"
+        )
+        q = f"CREATE TABLE {quoted_table} (spam INT, eggs VARCHAR)"
+        q = driver.query_override("TestConnection.test_get_table_schema_schema", q)
+        with conn.cursor() as cursor:
+            driver.try_drop_table(
+                cursor,
+                table_name="test_get_table_schema_schema",
+                schema_name=driver.features.secondary_schema,
+            )
+            cursor.execute(q)
+
+        schema = conn.adbc_get_table_schema(
+            "test_get_table_schema_schema",
+            db_schema_filter=driver.features.secondary_schema,
+        )
+        assert len(schema) == 2
 
     def test_repl(
         self,
