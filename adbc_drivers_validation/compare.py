@@ -202,7 +202,7 @@ def compare_fields(
     # this knowledge all over the place.
 
     assert expected.name == actual.name, (
-        f"Field names do not match: {path}{expected.name} != {path}{actual.name}"
+        f"Field names do not match: expected {path}{expected.name} != actual {path}{actual.name}"
     )
     # TODO: we should compare type.id, then manually recurse into child fields
     # and provide field_path so that we can have a nicer diff of nested types.
@@ -210,10 +210,10 @@ def compare_fields(
     # no built in to stringify type.id)
 
     assert expected.type == actual.type, (
-        f"Field types do not match: {path}{expected.name} ({expected.type}) != {path}{actual.name} ({actual.type})"
+        f"Field types do not match: expected {path}{expected.name} ({expected.type}) != actual {path}{actual.name} ({actual.type})"
     )
     assert expected.nullable == actual.nullable, (
-        f"Field nullability does not match: {path}{expected.name} ({expected.nullable}) != {path}{actual.name} ({actual.nullable})"
+        f"Field nullability does not match: expected {path}{expected.name} ({expected.nullable}) != actual {path}{actual.name} ({actual.nullable})"
     )
 
     # Another design flaw in PyArrow is that there is apparently no generic
@@ -240,11 +240,11 @@ def compare_fields(
     actual_extension_metadata = actual_metadata.get(b"ARROW:extension:metadata", None)
 
     assert expected_extension_name == actual_extension_name, (
-        f"Field extension names do not match: {path}{expected.name} ({expected_extension_name}) != {path}{actual.name} ({actual_extension_name})"
+        f"Field extension names do not match: expected {path}{expected.name} ({expected_extension_name}) != actual {path}{actual.name} ({actual_extension_name})"
     )
 
     assert expected_extension_metadata == actual_extension_metadata, (
-        f"Field extension metadata does not match: {path}{expected.name} ({expected_extension_metadata}) != {path}{actual.name} ({actual_extension_metadata})"
+        f"Field extension metadata does not match: expected {path}{expected.name} ({expected_extension_metadata}) != actual {path}{actual.name} ({actual_extension_metadata})"
     )
 
     # For now, allow extra metadata
@@ -252,7 +252,7 @@ def compare_fields(
         key: actual_metadata[key] for key in expected_metadata if key in actual_metadata
     }
     assert expected_metadata == actual_subset, (
-        f"Field metadata does not match: {path}{expected.name} ({expected_metadata}) != {path}{actual.name} ({actual_metadata})"
+        f"Field metadata does not match: expected {path}{expected.name} ({expected_metadata}) != actual {path}{actual.name} ({actual_metadata})"
     )
 
 
@@ -264,6 +264,7 @@ def compare_schemas(
     actual = make_nullable(actual)
     assert len(expected) == len(actual), "Schemas do not match"
 
+    # TODO: I think this would be better if we used difflib
     for expected_field, actual_field in zip(expected, actual):
         compare_fields(expected_field, actual_field, ())
 

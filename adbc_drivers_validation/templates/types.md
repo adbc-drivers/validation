@@ -14,38 +14,64 @@
   limitations under the License.
 #}
 
-#### {{quirks.vendor_name}} to Arrow
-
-:::{list-table}
-:header-rows: 1
-:width: 100%
-:widths: 1 3
-
-* - {{quirks.vendor_name}} Type
-  - Arrow Type
-
-{%- for entry in type_select|sort(attribute="lhs") %}
-
-* - {{ entry.lhs }}
-  - {{ entry.render_rhs() }}
-{%- endfor -%}
-{{ "" }}
-:::
-
-#### Arrow to {{quirks.vendor_name}}
-
 {# Note: The blank lines below make footnotes work #}
 {# See https://github.com/adbc-drivers/validation/issues/114 #}
+
+#### Database to Arrow
 
 <table class="docutils data align-default" style="width: 100%;">
 <thead>
 <tr>
-<th rowspan="2" style="text-align: center; vertical-align: middle;">Arrow Type</th>
-<th colspan="{{type_bind_ingest_columns|length}}" style="text-align: center;">{{quirks.vendor_name}} Type</th>
+<th style="text-align: left; vertical-align: middle;">Database Type</th>
+{% for col in type_select_columns %}
+<th style="text-align: center;">{{col}}</th>
+{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for row in type_select %}
+<tr>
+{% for span, cell in row %}
+{% if loop.index == 1 %}
+<td style="text-align: left;">
+
+{{cell}}
+
+</td>
+{% elif span == 1 %}
+<td style="text-align: center;">
+
+{{cell}}
+
+</td>
+{% else %}
+<td colspan="{{span}}" style="text-align: center;">
+
+{{cell}}
+
+</td>
+{% endif %}
+{% endfor %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+#### Arrow to Database
+
+<table class="docutils data align-default" style="width: 100%;">
+<thead>
+<tr>
+<th rowspan="3" style="text-align: left; vertical-align: middle;">Arrow Type</th>
+{% for v in type_bind_ingest_vendors %}
+<th colspan="{{type_bind_ingest_columns[v]|length}}" style="text-align: center;">{{v}} Type</th>
+{% endfor %}
 </tr>
 <tr>
-{% for col in type_bind_ingest_columns %}
+{% for v in type_bind_ingest_vendors %}
+{% for col in type_bind_ingest_columns[v] %}
 <th style="text-align: center;">{{col}}</th>
+{% endfor %}
 {% endfor %}
 </tr>
 </thead>
@@ -53,8 +79,8 @@
 {% for row in type_bind_ingest %}
 <tr>
 {% for span, cell in row %}
-{% if loop.index == 0 %}
-<td>
+{% if loop.index == 1 %}
+<td style="text-align: left;">
 
 {{cell}}
 

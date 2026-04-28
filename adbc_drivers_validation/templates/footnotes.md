@@ -14,6 +14,6 @@
   limitations under the License.
 #}
 
-{% for counter, footnote in footnotes["types"].items() %}
+{% for counter, footnote in footnotes.items() %}
 [^{{ counter }}]: {{ footnote }}
 {% endfor %}
