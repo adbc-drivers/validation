@@ -459,7 +459,7 @@ def render(
         for entry in type_table.type_select:
             columns[version.vendor][entry.lhs].add(entry)
 
-    column_order = list(sorted(columns.keys()))
+    column_order = list(sorted(columns.keys(), key=lambda v: vendor_sort[v][0]))
     row_order = list(
         sorted(functools.reduce(lambda a, b: a | b, (set(c) for c in columns.values())))
     )
@@ -507,7 +507,7 @@ def render(
                 column += f" ({entry.variant})"
             columns[version.vendor][column][entry.lhs].add(entry)
 
-    vendor_order = list(sorted(columns.keys()))
+    vendor_order = list(sorted(columns.keys(), key=lambda v: vendor_sort[v][0]))
     column_order = {
         vendor: list(sorted(columns[vendor].keys())) for vendor in vendor_order
     }
