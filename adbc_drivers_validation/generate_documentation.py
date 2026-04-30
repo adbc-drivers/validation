@@ -34,6 +34,12 @@ from . import model
 from .utils import arrow_type_name
 
 
+class GetQuirks(typing.Protocol):
+    """Get the quirks for a driver given the vendor/version."""
+
+    def __call__(self, version: str, *, vendor: str) -> model.DriverQuirks: ...
+
+
 @dataclasses.dataclass
 class CustomFeature:
     """A custom feature that a driver supports."""
@@ -155,14 +161,25 @@ class DriverTypeTable:
         return "\n".join(lines)
 
 
+@dataclasses.dataclass(frozen=True)
+class VendorVersion:
+    vendor: str
+    version: str
+
+
 @dataclasses.dataclass
 class ValidationReport:
     driver: str
-    versions: dict[str, DriverTypeTable]
+    versions: dict[VendorVersion, DriverTypeTable]
     driver_version: str = "unknown"
-    footnotes: dict[str, bidict.bidict[int, str]] = dataclasses.field(
-        default_factory=lambda: collections.defaultdict(bidict.bidict)
+    footnotes: bidict.bidict[int, str] = dataclasses.field(
+        default_factory=bidict.bidict
     )
+
+    def get_version(self, test_case: dict[str, typing.Any]) -> DriverTypeTable:
+        return self.versions[
+            VendorVersion(test_case["vendor"], test_case["vendor_version"])
+        ]
 
     def pprint(self) -> str:
         # Slightly more friendly representation for debugging
@@ -175,32 +192,31 @@ class ValidationReport:
         lines.append("========")
 
         for version, table in self.versions.items():
+            version_repr = f"{version.vendor} {version.version}"
             lines.append("")
-            lines.append(version)
-            lines.append("-" * len(version))
+            lines.append(version_repr)
+            lines.append("-" * len(version_repr))
             lines.append(table.pprint())
 
         lines.append("")
         lines.append("Footnotes")
         lines.append("=========")
-        for idx, footnote in self.footnotes["types"].items():
+        for idx, footnote in self.footnotes.items():
             lines.append(f"[^{idx}]: {footnote}")
 
         return "\n".join(lines)
 
-    def add_footnote(self, scope: str, contents: str) -> str:
-        if scope not in {"types"}:
-            raise ValueError(f"Invalid footnote scope: {scope}")
-
-        if contents in self.footnotes[scope].inverse:
-            counter = self.footnotes[scope].inverse[contents]
+    def add_footnote(self, contents: str) -> str:
+        if contents in self.footnotes.inverse:
+            counter = self.footnotes.inverse[contents]
             return f" [^{counter}]"
-        counter = len(self.footnotes[scope]) + 1
-        self.footnotes[scope][counter] = contents
+        counter = len(self.footnotes) + 1
+        self.footnotes[counter] = contents
         return f" [^{counter}]"
 
     def add_table_entry(
         self,
+        vendor: str,
         vendor_version: str,
         category: typing.Literal["select", "bind", "ingest"],
         lhs: str,
@@ -243,12 +259,13 @@ class ValidationReport:
 
         footnotes = []
         for caveat in caveats:
-            fn = self.add_footnote("types", caveat)
+            fn = self.add_footnote(caveat)
             if fn not in footnotes:
                 footnotes.append(fn)
         footnotes = tuple(sorted(footnotes))
 
-        getattr(self.versions[vendor_version], f"type_{category}").append(
+        version = self.versions[VendorVersion(vendor, vendor_version)]
+        getattr(version, f"type_{category}").append(
             TypeTableEntry(
                 lhs=lhs,
                 rhs=rhs,
@@ -283,9 +300,7 @@ def render_part(template: jinja2.Template, kwargs: dict[str, typing.Any]) -> str
     return rendered
 
 
-def load_testcases(
-    get_quirks: typing.Callable[[str], model.DriverQuirks], results_path: Path
-) -> None:
+def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
     """Load test case data into DuckDB."""
     report = xml.etree.ElementTree.parse(results_path).getroot()
 
@@ -305,8 +320,19 @@ def load_testcases(
         for prop in testcase.findall(".//properties/property"):
             properties[prop.get("name")] = prop.get("value")
 
+        if "driver" not in properties:
+            print(
+                "Warning: testcase is missing driver property, skipping:",
+                f"{module}.{name}",
+            )
+            continue
+
+        # XXX: for historical reasons this param was the "driver", but to
+        # generalize validation suites for drivers that support multiple
+        # vendors/backends (e.g. Spark, MySQL), now it should be
+        # "vendor:version".
         driver, _, version = properties["driver"].partition(":")
-        quirks = get_quirks(version)
+        quirks = get_quirks(version, vendor=driver)
         query_set = quirks.query_set
         driver = quirks.name
         version = quirks.short_version
@@ -339,7 +365,7 @@ def load_testcases(
                 "test_module": module,
                 "test_name": name,
                 "test_result": test_result,
-                "driver": driver,
+                "vendor": driver,
                 "vendor_version": version,
                 "query_name": query_name,
                 "arrow_type_name": arrow_type,
@@ -353,7 +379,7 @@ def load_testcases(
             pyarrow.field("test_module", pyarrow.string()),
             pyarrow.field("test_name", pyarrow.string()),
             pyarrow.field("test_result", pyarrow.string()),
-            pyarrow.field("driver", pyarrow.string()),
+            pyarrow.field("vendor", pyarrow.string()),
             pyarrow.field("vendor_version", pyarrow.string()),
             pyarrow.field("query_name", pyarrow.string()),
             pyarrow.field("arrow_type_name", pyarrow.string()),
@@ -371,7 +397,7 @@ def load_testcases(
               test_module STRING,
               test_name STRING,
               test_result STRING,
-              driver STRING,
+              vendor STRING,
               vendor_version STRING,
               query_name STRING,
               arrow_type_name STRING,
@@ -383,7 +409,7 @@ def load_testcases(
           test_module,
           test_name,
           test_result,
-          driver,
+          vendor,
           vendor_version,
           query_name,
           arrow_type_name,
@@ -396,57 +422,114 @@ def load_testcases(
 
 def render(
     report: ValidationReport,
+    vendor_mapping: list[tuple[str, str]],
     driver_template_path: Path,
     output_directory: Path,
 ) -> None:
+    # do not sort; use the given order
+    vendor_sort = {
+        vendor: (idx, friendly) for idx, (vendor, friendly) in enumerate(vendor_mapping)
+    }
+    print(vendor_sort)
+
     env = jinja2.Environment(
         loader=jinja2.PackageLoader("adbc_drivers_validation"),
         autoescape=jinja2.select_autoescape(),
         trim_blocks=True,
     )
+    env.globals["len"] = len  # ty: ignore[invalid-assignment]
     with driver_template_path.open("r") as source:
         driver_template = env.from_string(source.read())
 
     driver = report.driver
-    default_vendor_version = max(report.versions.keys())
-    default_version_info = report.versions[default_vendor_version]
-
-    template_vars = {
-        **dataclasses.asdict(report.versions[default_vendor_version]),
+    template_vars: typing.Dict[str, typing.Any] = {
         "driver": report.driver,
     }
-    template_vars["type_select"] = report.versions[default_vendor_version].type_select
+
+    # ======================================================================
+    # Type Support Table
+    # ======================================================================
+
+    # Combine select into a single table. The table has a variable number of
+    # columns, one for each vendor tested.
+
+    # vendor : { SQL type name : Arrow type name }
+    columns = collections.defaultdict(lambda: collections.defaultdict(set))
+    for version, type_table in report.versions.items():
+        for entry in type_table.type_select:
+            columns[version.vendor][entry.lhs].add(entry)
+
+    column_order = list(sorted(columns.keys(), key=lambda v: vendor_sort[v][0]))
+    row_order = list(
+        sorted(functools.reduce(lambda a, b: a | b, (set(c) for c in columns.values())))
+    )
+    type_select = []
+    for k in row_order:
+        all_cells = []
+        for c in column_order:
+            entries = columns[c].get(k)
+            if entries:
+                # TODO: more sophisticated merging? Or break out columns for
+                # different (major) versions; or simply hope that we can treat
+                # different major versions as different "vendors" which will
+                # break out a column for them
+                all_cells.append(", ".join(entry.render_rhs() for entry in entries))
+            else:
+                all_cells.append("(NA/not tested)")
+
+        span_cells = [[1, k]]
+        for i, cell in enumerate(all_cells):
+            if i > 0 and cell == span_cells[-1][1]:
+                span_cells[-1][0] += 1
+            else:
+                span_cells.append([1, cell])
+        type_select.append(span_cells)
+
+    template_vars["type_select"] = type_select
+    template_vars["type_select_columns"] = column_order
 
     # Combine bind and ingest into a single type_bind_ingest table. The table
     # has a variable number of columns since ingest may have multiple modes.
     # Because the logic gets complicated, render it entirely in Python rather
     # than in the template
 
-    # (bind, ingest, ingest variant, ...) : { Arrow type name : SQL type names }
-    columns = collections.defaultdict(lambda: collections.defaultdict(set))
+    # vendor: category (bind/ingest/ingest variant...) : { Arrow type name : SQL type names }
+    columns = collections.defaultdict(
+        lambda: collections.defaultdict(lambda: collections.defaultdict(set))
+    )
 
-    for entry in report.versions[default_vendor_version].type_bind:
-        columns["Bind"][entry.lhs].add(entry)
-    for entry in report.versions[default_vendor_version].type_ingest:
-        column = "Ingest"
-        if entry.variant:
-            column += f" ({entry.variant})"
-        columns[column][entry.lhs].add(entry)
+    for version, type_table in report.versions.items():
+        for entry in type_table.type_bind:
+            columns[version.vendor]["Bind"][entry.lhs].add(entry)
+        for entry in type_table.type_ingest:
+            column = "Ingest"
+            if entry.variant:
+                column += f" ({entry.variant})"
+            columns[version.vendor][column][entry.lhs].add(entry)
 
-    column_order = list(sorted(columns.keys()))
+    vendor_order = list(sorted(columns.keys(), key=lambda v: vendor_sort[v][0]))
+    column_order = {
+        vendor: list(sorted(columns[vendor].keys())) for vendor in vendor_order
+    }
     row_order = list(
-        sorted(functools.reduce(lambda a, b: a | b, (set(c) for c in columns.values())))
+        sorted(
+            functools.reduce(
+                lambda a, b: a | b,
+                (set(c) for v in columns.values() for c in v.values()),
+            )
+        )
     )
     type_bind_ingest = []
     for k in row_order:
         all_cells = []
-        for c in column_order:
-            entries = columns[c].get(k)
-            if entries:
-                # TODO: more sophisticated merging?
-                all_cells.append(", ".join(entry.render_rhs() for entry in entries))
-            else:
-                all_cells.append("(not tested)")
+        for v in vendor_order:
+            for c in column_order[v]:
+                entries = columns[v][c].get(k)
+                if entries:
+                    # TODO: more sophisticated merging?
+                    all_cells.append(", ".join(entry.render_rhs() for entry in entries))
+                else:
+                    all_cells.append("(NA/not tested)")
 
         span_cells = [[1, k]]
         for i, cell in enumerate(all_cells):
@@ -458,9 +541,262 @@ def render(
 
     template_vars["type_bind_ingest"] = type_bind_ingest
     template_vars["type_bind_ingest_columns"] = column_order
+    template_vars["type_bind_ingest_vendors"] = vendor_order
+    template_vars["vendor_friendly_name"] = {
+        vendor: vendor_sort[vendor][1] for vendor in vendor_order
+    }
 
     types = render_part(env.get_template("types.md"), template_vars)
-    features = render_part(env.get_template("features.md"), template_vars)
+
+    # ======================================================================
+    # Feature Support Table
+    # ======================================================================
+
+    rows = []
+    for version, type_table in report.versions.items():
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Create",
+                "suborder": 1,
+                "supported": type_table.ingest["create"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Append",
+                "suborder": 2,
+                "supported": type_table.ingest["append"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Create/Append",
+                "suborder": 3,
+                "supported": type_table.ingest["createappend"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Replace",
+                "suborder": 4,
+                "supported": type_table.ingest["replace"]
+                and type_table.ingest["replace_noop"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Temporary Table",
+                "suborder": 5,
+                "supported": type_table.ingest["temporary"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Target Catalog",
+                "suborder": 6,
+                "supported": type_table.ingest["catalog"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Target Schema",
+                "suborder": 7,
+                "supported": type_table.ingest["schema"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bulk Ingestion",
+                "subfeature": "Non-nullable fields are marked NOT NULL",
+                "suborder": 8,
+                "supported": type_table.ingest["not_null"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Catalog (GetObjects)",
+                "subfeature": "depth=catalogs",
+                "suborder": 1,
+                "supported": type_table.get_objects["catalog"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Catalog (GetObjects)",
+                "subfeature": "depth=db_schemas",
+                "suborder": 2,
+                "supported": type_table.get_objects["schema"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Catalog (GetObjects)",
+                "subfeature": "depth=tables",
+                "suborder": 3,
+                "supported": type_table.get_objects["table"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Catalog (GetObjects)",
+                "subfeature": "depth=columns (all)",
+                "suborder": 4,
+                "supported": type_table.get_objects["column"],
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Get Parameter Schema",
+                "subfeature": None,
+                "suborder": None,
+                "supported": type_table.features.statement_get_parameter_schema,
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Get Table Schema",
+                "subfeature": None,
+                "suborder": None,
+                "supported": type_table.get_table_schema,
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Prepared Statements",
+                "subfeature": None,
+                "suborder": None,
+                "supported": type_table.features.statement_prepare,
+            }
+        )
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Transactions",
+                "subfeature": None,
+                "suborder": None,
+                "supported": type_table.features.connection_transactions,
+            }
+        )
+
+    duckdb.register("features", pyarrow.Table.from_pylist(rows))
+    duckdb.sql(
+        """
+        CREATE VIEW features_agg AS
+        FROM features
+        SELECT
+          feature,
+          subfeature,
+          suborder,
+          vendor,
+          CASE
+            WHEN BOOL_AND(supported) THEN 'supported'
+            WHEN BOOL_OR(supported) THEN 'inconsistent'
+            ELSE 'unsupported'
+          END AS support
+        GROUP BY feature, subfeature, suborder, vendor
+        ORDER BY feature, suborder
+        """
+    )
+    raw_features = duckdb.sql(
+        """
+        PIVOT features_agg
+        ON vendor
+        USING ANY_VALUE(support)
+        GROUP BY feature, subfeature, suborder
+        ORDER BY feature, suborder
+        """
+    )
+
+    features = []
+    vendors = raw_features.columns[3:]
+    for row in raw_features.fetchall():
+        group = row[0]
+        subgroup = row[1] or ""
+        if not features or features[-1]["feature"] != group:
+            features.append(
+                {
+                    "feature": group,
+                    "subfeatures": [],
+                }
+            )
+
+        span_cells = []
+        for i, cell in enumerate(row[3:]):
+            if cell == "inconsistent":
+                cell = "⚠️" + report.add_footnote("Support varies based on version")
+            elif cell == "supported":
+                cell = "✅"
+            elif cell == "unsupported":
+                cell = "❌"
+            else:
+                raise ValueError(f"Unexpected support value: {cell}")
+
+            if i > 0 and cell == span_cells[-1][1]:
+                span_cells[-1][0] += 1
+            else:
+                span_cells.append([1, cell])
+
+        features[-1]["subfeatures"].append(
+            {
+                "subfeature": subgroup,
+                "support": span_cells,
+            }
+        )
+
+    vendors = [vendor_sort[v][1] for v in vendors]
+
+    # TODO: restore support for driver-specific features (we don't really use
+    # this right now)
+    features = render_part(
+        env.get_template("features.md"),
+        {
+            "features": features,
+            "vendors": vendors,
+        },
+    )
+
+    # ======================================================================
+    # Misc.
+    # ======================================================================
+
     footnotes = render_part(
         env.get_template("footnotes.md"),
         {**template_vars, "footnotes": report.footnotes},
@@ -483,12 +819,19 @@ def render(
     # TODO: Improve this display for drivers tested with many versions. We
     # probably want to show one badge with a range rather than a badge for every
     # version
-    for version in sorted(report.versions):
-        heading += f" {{badge-success}}`Tested With|{default_version_info.quirks.vendor_name} {version}`"
+    for version in sorted(
+        report.versions, key=lambda v: (vendor_sort[v.vendor][0], v.version)
+    ):
+        friendly_vendor = vendor_sort[version.vendor][1]
+        heading += (
+            f" {{badge-success}}`Tested With|{friendly_vendor} {version.version}`"
+        )
 
-    compatibility_info = f"This driver was tested on the following versions of {default_version_info.quirks.vendor_name}:\n"
-    for version in sorted(report.versions):
-        compatibility_info += f"\n- {report.versions[version].vendor_version}"
+    compatibility_info = "This driver was tested on:\n"
+    for version in sorted(report.versions, key=lambda v: (v.vendor, v.version)):
+        vendor_name = report.versions[version].quirks.vendor_name
+        full_version = report.versions[version].vendor_version
+        compatibility_info += f"\n- {vendor_name} `{full_version}`"
 
     if is_prerelease:
         heading += (
@@ -511,17 +854,19 @@ def render(
     )
 
 
-def generate_includes(
-    get_quirks: typing.Callable[[str], model.DriverQuirks],
-) -> ValidationReport:
-    # Handle different versions of one vendor
-    driver = duckdb.sql("FROM testcases SELECT DISTINCT driver").fetchall()
-    assert len(driver) == 1, f"Expected exactly one driver, got {driver}"
-    driver = driver[0][0]
+def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
+    # Handle different vendors, multiple versions
     versions = {}
-    for row in duckdb.sql("FROM testcases SELECT DISTINCT vendor_version").fetchall():
-        quirks = get_quirks(row[0])
-        versions[row[0]] = DriverTypeTable(quirks=quirks, features=quirks.features)
+    for row in duckdb.sql(
+        "FROM testcases SELECT DISTINCT vendor, vendor_version"
+    ).fetchall():
+        vendor = row[0]
+        version = row[1]
+        print("Found suite:", vendor, version)
+        quirks = get_quirks(version, vendor=vendor)
+        versions[VendorVersion(vendor, version)] = DriverTypeTable(
+            quirks=quirks, features=quirks.features
+        )
 
     report = ValidationReport(driver=driver, versions=versions)
 
@@ -530,9 +875,11 @@ def generate_includes(
         duckdb.sql("""
     FROM testcases
     SELECT
+      vendor,
+      vendor_version,
       properties->>'driver_version' AS driver_version,
       properties->>'short_version' AS short_version,
-      properties->>'vendor_version' AS vendor_version,
+      properties->>'vendor_version' AS full_version,
     WHERE test_name = 'test_get_info'
     """)
         .arrow()
@@ -551,9 +898,8 @@ def generate_includes(
             report.driver_version = driver_version[0]
         for v in version:
             short_version = v["short_version"] or "(unknown)"
-            vendor_version = v["vendor_version"] or "(unknown)"
-            if short_version in report.versions:
-                report.versions[short_version].vendor_version = vendor_version
+            full_version = v["full_version"] or "(unknown)"
+            report.get_version(v).vendor_version = full_version
     else:
         # No version info available (test_get_info didn't run or failed)
         report.driver_version = "(unknown)"
@@ -565,6 +911,7 @@ def generate_includes(
         duckdb.sql("""
         FROM testcases
         SELECT
+          vendor,
           vendor_version,
           tags->>'sql-type-name' AS sql_type,
           ARRAY_AGG(test_result ORDER BY query_name ASC) AS test_results,
@@ -574,19 +921,20 @@ def generate_includes(
           test_name = 'test_query'
           AND query_name NOT LIKE 'type/bind/%'
           AND (tags->>'sql-type-name') IS NOT NULL
-        GROUP BY vendor_version, tags->>'sql-type-name'
-        ORDER BY vendor_version, tags->>'sql-type-name'
+        GROUP BY vendor, vendor_version, tags->>'sql-type-name'
+        ORDER BY vendor, vendor_version, tags->>'sql-type-name'
         """)
         .arrow()
         .read_all()
         .to_pylist()
     )
     for test_case in type_tests:
+        query_set = get_quirks(
+            test_case["vendor_version"], vendor=test_case["vendor"]
+        ).query_set
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
-            query = get_quirks(test_case["vendor_version"]).query_set.queries[
-                query_name
-            ]
+            query = query_set.queries[query_name]
             show_type_parameters = query.metadata().tags.show_arrow_type_parameters
 
             # Take the first field; some queries may select additional things
@@ -612,6 +960,7 @@ def generate_includes(
         arrow_type = html.escape(arrow_type)
         sql_type = html.escape(test_case["sql_type"])
         report.add_table_entry(
+            test_case["vendor"],
             test_case["vendor_version"],
             "select",
             sql_type,
@@ -625,6 +974,7 @@ def generate_includes(
         duckdb.sql("""
         FROM testcases
         SELECT
+          vendor,
           vendor_version,
           arrow_type_name,
           tags->>'sql-type-name' AS sql_type,
@@ -635,21 +985,24 @@ def generate_includes(
           test_name = 'test_query'
           AND query_name LIKE 'type/bind/%'
           AND (tags->>'sql-type-name') IS NOT NULL
-        GROUP BY vendor_version, arrow_type_name, tags->>'sql-type-name'
-        ORDER BY vendor_version, arrow_type_name, tags->>'sql-type-name'
+        GROUP BY vendor, vendor_version, arrow_type_name, tags->>'sql-type-name'
+        ORDER BY vendor, vendor_version, arrow_type_name, tags->>'sql-type-name'
         """)
         .arrow()
         .read_all()
         .to_pylist()
     )
     for test_case in type_tests:
-        query_set = get_quirks(test_case["vendor_version"]).query_set
+        query_set = get_quirks(
+            test_case["vendor_version"], vendor=test_case["vendor"]
+        ).query_set
         arrow_type_names = set()
         for query_name in test_case["query_names"]:
             arrow_type_names.add(query_set.queries[query_name].arrow_type_name)
         sql_type = html.escape(test_case["sql_type"])
         arrow_type = html.escape(test_case["arrow_type_name"])
         report.add_table_entry(
+            test_case["vendor"],
             test_case["vendor_version"],
             "bind",
             arrow_type,
@@ -662,6 +1015,7 @@ def generate_includes(
         duckdb.sql("""
         FROM testcases
         SELECT
+          vendor,
           vendor_version,
           arrow_type_name,
           tags->>'sql-type-name' AS sql_type,
@@ -672,18 +1026,21 @@ def generate_includes(
           test_module LIKE '%TestIngest'
           AND test_name = 'test_create'
           AND (tags->>'sql-type-name') IS NOT NULL
-        ORDER BY vendor_version, query_name
+        ORDER BY vendor, vendor_version, query_name
         """)
         .arrow()
         .read_all()
         .to_pylist()
     )
     for test_case in type_tests:
-        query_set = get_quirks(test_case["vendor_version"]).query_set
+        query_set = get_quirks(
+            test_case["vendor_version"], vendor=test_case["vendor"]
+        ).query_set
         query_name = test_case["query_name"]
         arrow_type = html.escape(test_case["arrow_type_name"])
         sql_type = html.escape(test_case["sql_type"])
         report.add_table_entry(
+            test_case["vendor"],
             test_case["vendor_version"],
             "ingest",
             arrow_type,
@@ -702,40 +1059,41 @@ def generate_includes(
     WITH get_objects_cases AS (
       FROM testcases
       SELECT
+        vendor,
         vendor_version,
         regexp_extract(test_name, 'test_get_objects_([a-z]+)', 1) AS test_name,
         test_result,
       WHERE test_name LIKE 'test_get_objects_%'
     )
     FROM get_objects_cases
-    SELECT vendor_version, test_name, BOOL_AND(test_result = 'passed') AS supported
-    GROUP BY vendor_version, test_name
+    SELECT vendor, vendor_version, test_name, BOOL_AND(test_result = 'passed') AS supported
+    GROUP BY vendor, vendor_version, test_name
     """)
         .arrow()
         .read_all()
         .to_pylist()
     )
     for test_case in get_objects:
-        report.versions[test_case["vendor_version"]].get_objects[
-            test_case["test_name"]
-        ] = test_case["supported"]
+        report.get_version(test_case).get_objects[test_case["test_name"]] = test_case[
+            "supported"
+        ]
 
     # Get table schema
     get_table_schema = (
         duckdb.sql("""
     FROM testcases
-    SELECT vendor_version, CAST(COUNTIF(test_result = 'passed') AS BIGINT) AS supported_cases, COUNT() AS total_cases
+    SELECT vendor, vendor_version, CAST(COUNTIF(test_result = 'passed') AS BIGINT) AS supported_cases, COUNT() AS total_cases
     WHERE test_name = 'test_get_table_schema' AND test_result != 'skipped'
-    GROUP BY vendor_version, test_name
+    GROUP BY vendor, vendor_version, test_name
     """)
         .arrow()
         .read_all()
         .to_pylist()
     )
     for test_case in get_table_schema:
-        report.versions[test_case["vendor_version"]].get_table_schema = (
-            test_case["supported_cases"] == test_case["total_cases"]
-        )
+        version = report.get_version(test_case)
+        supported = test_case["supported_cases"] == test_case["total_cases"]
+        version.get_table_schema = supported
 
     # Ingest modes
     ingest_types = (
@@ -743,21 +1101,22 @@ def generate_includes(
     WITH ingest_cases AS (
       FROM testcases
       SELECT
+        vendor,
         vendor_version,
         test_name,
         test_result,
       WHERE test_module LIKE '%TestIngest'
     )
     FROM ingest_cases
-    SELECT vendor_version, test_name, BOOL_OR(test_result = 'passed') AS supported
-    GROUP BY vendor_version, test_name
+    SELECT vendor, vendor_version, test_name, BOOL_OR(test_result = 'passed') AS supported
+    GROUP BY vendor, vendor_version, test_name
     """)
         .arrow()
         .read_all()
         .to_pylist()
     )
     for test_case in ingest_types:
-        ingest = report.versions[test_case["vendor_version"]].ingest
+        ingest = report.get_version(test_case).ingest
         name = test_case["test_name"][5:]  # Strip 'test_' prefix
         ingest[name] = test_case["supported"]
 
@@ -766,6 +1125,7 @@ def generate_includes(
         duckdb.sql("""
         FROM testcases
         SELECT
+          vendor,
           vendor_version,
           properties->>'feature:group' AS feature_group,
           properties->>'feature:name' AS feature_name,
@@ -775,10 +1135,12 @@ def generate_includes(
           (properties->>'feature:group' IS NOT NULL) AND
           (properties->>'feature:name' IS NOT NULL)
         GROUP BY
+          vendor,
           vendor_version,
           properties->>'feature:group',
           properties->>'feature:name'
         ORDER BY
+          vendor,
           vendor_version,
           properties->>'feature:group',
           properties->>'feature:name'
@@ -788,7 +1150,7 @@ def generate_includes(
         .to_pylist()
     )
     for test_case in custom_features:
-        custom_features = report.versions[test_case["vendor_version"]].custom_features
+        custom_features = report.get_version(test_case).custom_features
         custom_features.groups[test_case["feature_group"]].append(
             CustomFeature(
                 name=test_case["feature_name"],
@@ -801,13 +1163,38 @@ def generate_includes(
 
 
 def generate(
-    get_quirks: typing.Callable[[str], model.DriverQuirks],
+    driver: str,
+    get_quirks: GetQuirks,
+    vendor_mapping: list[tuple[str, str]],
     test_results: list[Path],
     driver_template: Path,
     output: Path,
 ) -> None:
+    """Generate documentation for a driver based on test results.
+
+    Parameters
+    ----------
+    get_quirks
+      A function that takes a vendor version and returns the corresponding
+      driver quirks.
+
+    version_mapping
+      A mapping from vendor strings ("mysql") to display names
+      ("MySQL"). Additionally, the order of keys will be used to determine the
+      order of display (so "MySQL" can be sorted before "MariaDB").
+
+    test_results
+      A list of paths to JUnit XML files.
+
+    driver_template
+      The Markdown template to use.
+
+    output
+      Where to write the result.
+
+    """
     for results in test_results:
         load_testcases(get_quirks, results)
-    report = generate_includes(get_quirks)
+    report = generate_includes(driver, get_quirks)
     print(report.pprint())
-    render(report, driver_template, output)
+    render(report, vendor_mapping, driver_template, output)
