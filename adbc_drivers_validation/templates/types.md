@@ -24,7 +24,7 @@
 <tr>
 <th style="text-align: left; vertical-align: middle;">Database Type</th>
 {% for col in type_select_columns %}
-<th style="text-align: center;">{{col}}</th>
+<th style="text-align: center;">{{vendor_friendly_name[col]}}</th>
 {% endfor %}
 </tr>
 </thead>
@@ -64,7 +64,7 @@
 <tr>
 <th rowspan="3" style="text-align: left; vertical-align: middle;">Arrow Type</th>
 {% for v in type_bind_ingest_vendors %}
-<th colspan="{{type_bind_ingest_columns[v]|length}}" style="text-align: center;">{{v}} Type</th>
+<th colspan="{{type_bind_ingest_columns[v]|length}}" style="text-align: center;">{{vendor_friendly_name[v]}} Type</th>
 {% endfor %}
 </tr>
 <tr>

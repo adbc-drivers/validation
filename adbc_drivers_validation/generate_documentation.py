@@ -422,9 +422,16 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
 
 def render(
     report: ValidationReport,
+    vendor_mapping: list[tuple[str, str]],
     driver_template_path: Path,
     output_directory: Path,
 ) -> None:
+    # do not sort; use the given order
+    vendor_sort = {
+        vendor: (idx, friendly) for idx, (vendor, friendly) in enumerate(vendor_mapping)
+    }
+    print(vendor_sort)
+
     env = jinja2.Environment(
         loader=jinja2.PackageLoader("adbc_drivers_validation"),
         autoescape=jinja2.select_autoescape(),
@@ -535,6 +542,9 @@ def render(
     template_vars["type_bind_ingest"] = type_bind_ingest
     template_vars["type_bind_ingest_columns"] = column_order
     template_vars["type_bind_ingest_vendors"] = vendor_order
+    template_vars["vendor_friendly_name"] = {
+        vendor: vendor_sort[vendor][1] for vendor in vendor_order
+    }
 
     types = render_part(env.get_template("types.md"), template_vars)
 
@@ -771,6 +781,8 @@ def render(
             }
         )
 
+    vendors = [vendor_sort[v][1] for v in vendors]
+
     # TODO: restore support for driver-specific features (we don't really use
     # this right now)
     features = render_part(
@@ -807,8 +819,13 @@ def render(
     # TODO: Improve this display for drivers tested with many versions. We
     # probably want to show one badge with a range rather than a badge for every
     # version
-    for version in sorted(report.versions, key=lambda v: (v.vendor, v.version)):
-        heading += f" {{badge-success}}`Tested With|{version.vendor} {version.version}`"
+    for version in sorted(
+        report.versions, key=lambda v: (vendor_sort[v.vendor][0], v.version)
+    ):
+        friendly_vendor = vendor_sort[version.vendor][1]
+        heading += (
+            f" {{badge-success}}`Tested With|{friendly_vendor} {version.version}`"
+        )
 
     compatibility_info = "This driver was tested on:\n"
     for version in sorted(report.versions, key=lambda v: (v.vendor, v.version)):
@@ -1148,12 +1165,36 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 def generate(
     driver: str,
     get_quirks: GetQuirks,
+    vendor_mapping: list[tuple[str, str]],
     test_results: list[Path],
     driver_template: Path,
     output: Path,
 ) -> None:
+    """Generate documentation for a driver based on test results.
+
+    Parameters
+    ----------
+    get_quirks
+      A function that takes a vendor version and returns the corresponding
+      driver quirks.
+
+    version_mapping
+      A mapping from vendor strings ("mysql") to display names
+      ("MySQL"). Additionally, the order of keys will be used to determine the
+      order of display (so "MySQL" can be sorted before "MariaDB").
+
+    test_results
+      A list of paths to JUnit XML files.
+
+    driver_template
+      The Markdown template to use.
+
+    output
+      Where to write the result.
+
+    """
     for results in test_results:
         load_testcases(get_quirks, results)
     report = generate_includes(driver, get_quirks)
     print(report.pprint())
-    render(report, driver_template, output)
+    render(report, vendor_mapping, driver_template, output)
