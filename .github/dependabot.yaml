@@ -24,6 +24,8 @@ updates:
           - "*"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: pip
     commit-message:
@@ -35,3 +37,5 @@ updates:
           - "*"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7

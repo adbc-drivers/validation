@@ -12,16 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This is a common workflow for performing basic PR checks like running
-# pre-commit.
+# This is a common workflow for performing basic PR checks, like ensuring the
+# title format.
 
-name: Dev
+name: Dev PR
 
 on:
-  pull_request: {}
-  push:
-    branches:
-      - main
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - ready_for_review
+      - review_requested
 
 concurrency:
   group: ${{ github.repository }}-${{ github.ref }}-${{ github.workflow }}
@@ -35,34 +38,21 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: "lint & pre-commit"
+  pr_standard:
+    name: "Check PR"
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: "3.x"
-
-      - name: Install
-        run: pip install pre-commit
-
-      - name: pre-commit (cache)
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-
-      - name: pre-commit
+      - name: Check PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          pre-commit run --all-files --color=always --show-diff-on-failure --verbose
+          git clone --depth 1 https://github.com/adbc-drivers/dev
+          python dev/adbc_drivers_dev/title_check.py $(pwd) "$PR_TITLE"
 
-      - name: Analyze workflows with zizmor
-        uses: zizmorcore/zizmor-action@b1d7e1fb5de872772f31590499237e7cce841e8e # v0.5.3
-        with:
-          advanced-security: false
+      # TODO: assign milestone
