@@ -25,4 +25,4 @@ permissions:
 
 jobs:
   issue_assign:
-    uses: adbc-drivers/dev/.github/workflows/dev_issues.yaml@08f8fca0626bb2311389ce1cacd7f614bb9c84c3
+    uses: adbc-drivers/dev/.github/workflows/dev_issues.yaml@856a0d14c8528f04feeb44d0f709c118a0e8ac5a
