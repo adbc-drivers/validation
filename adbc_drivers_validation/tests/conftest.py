@@ -107,15 +107,10 @@ def noci() -> None:
 
 
 @pytest.fixture(scope="session")
-def conn_factory(
-    request: pytest.FixtureRequest,
+def db_kwargs(
     driver: model.DriverQuirks,
-    driver_path: str,
-) -> typing.Callable[[], adbc_driver_manager.dbapi.Connection]:
+) -> dict[str, typing.Any]:
     db_kwargs = {}
-    conn_kwargs = {}
-    stmt_kwargs = {}
-
     for k, v in driver.setup.database.items():
         if isinstance(v, model.FromEnv):
             if v.env not in os.environ:
@@ -123,6 +118,19 @@ def conn_factory(
             db_kwargs[k] = os.environ[v.env]
         else:
             db_kwargs[k] = v
+    return db_kwargs
+
+
+@pytest.fixture(scope="session")
+def conn_factory(
+    request: pytest.FixtureRequest,
+    driver: model.DriverQuirks,
+    driver_path: str,
+    db_kwargs: dict[str, typing.Any],
+) -> typing.Callable[[], adbc_driver_manager.dbapi.Connection]:
+    db_kwargs = db_kwargs.copy()
+    conn_kwargs = {}
+    stmt_kwargs = {}
 
     for k, v in driver.setup.statement.items():
         if isinstance(v, model.FromEnv):
