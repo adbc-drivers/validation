@@ -91,9 +91,19 @@ class TxtCase:
             raise ValueError(f"'{part}' does not require a schema")
 
         if part == "metadata":
-            return tomllib.loads(value)
+            try:
+                return tomllib.loads(value)
+            except tomllib.TOMLDecodeError as e:
+                e.add_note(f"Failed to parse TOML in 'metadata' part of {self._path}")
+                raise
         if part in {"bind_schema", "expected_schema", "catalog_schema", "input_schema"}:
-            return arrowjson.loads_schema(value)
+            try:
+                return arrowjson.loads_schema(value)
+            except Exception as e:
+                e.add_note(
+                    f"Failed to parse Arrow schema in '{part}' part of {self._path}"
+                )
+                raise
         elif part in {"bind_query", "query", "setup_query"}:
             return value
 
