@@ -40,6 +40,9 @@ def generate_tests(
     all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
+    if utils.generate_tests_by_marks(all_quirks, metafunc):
+        return
+
     combinations = []
 
     for quirks in all_quirks:
@@ -52,7 +55,8 @@ def generate_tests(
 
         for query in quirks.query_set.queries.values():
             marks = []
-            marks.extend(query.pytest_marks)
+            if metafunc.definition.name != "test_lint_query":
+                marks.extend(query.pytest_marks)
 
             if (
                 not quirks.features.statement_bind
