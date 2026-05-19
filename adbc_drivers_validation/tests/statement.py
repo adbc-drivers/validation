@@ -23,13 +23,16 @@ import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
-from adbc_drivers_validation import model
+from adbc_drivers_validation import model, utils
 
 
 def generate_tests(
     all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
+    if utils.generate_tests_by_marks(all_quirks, metafunc):
+        return
+
     marks = []
     combinations = []
 

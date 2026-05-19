@@ -28,7 +28,7 @@ import adbc_driver_manager.dbapi
 import pyarrow
 import pytest
 
-from adbc_drivers_validation import compare, model
+from adbc_drivers_validation import compare, model, utils
 from adbc_drivers_validation.model import Query
 from adbc_drivers_validation.utils import (
     execute_query_without_prepare,
@@ -43,6 +43,9 @@ def generate_tests(
     ingest_mode_queries: set[str] = {"ingest/string"},
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
+    if utils.generate_tests_by_marks(all_quirks, metafunc):
+        return
+
     param_string = ""
     combinations = []
 
