@@ -40,12 +40,6 @@ def generate_tests(
         driver_param = f"{quirks.name}:{quirks.short_version}"
 
         if (
-            metafunc.definition.name == "test_execute_schema"
-            and not quirks.features.statement_execute_schema
-        ):
-            marks.append(pytest.mark.skip("execute_schema not supported"))
-
-        if (
             metafunc.definition.name == "test_parameter_execute"
             and not quirks.features.statement_bind
         ):
@@ -90,13 +84,13 @@ class TestStatement:
         quoted_name = driver.quote_identifier(table_name)
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-
             query = f"CREATE TABLE {quoted_name} (id INT, value VARCHAR)"
             query = driver.query_override("TestStatement.sample_table", query)
-            cursor.execute(query)
-
+            cursor.adbc_statement.set_sql_query(query)
+            cursor.adbc_statement.execute_update()
         return quoted_name
 
+    @pytest.mark.requires_features(["statement_execute_schema"])
     def test_execute_schema_noalias(
         self,
         driver: model.DriverQuirks,
