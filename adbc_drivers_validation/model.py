@@ -311,14 +311,14 @@ class DriverQuirks(abc.ABC):
             If True, the table is a temporary table.
         """
         try:
-            cursor.execute(
-                self.drop_table(
-                    table_name=table_name,
-                    schema_name=schema_name,
-                    catalog_name=catalog_name,
-                    temporary=temporary,
-                )
+            query = self.drop_table(
+                table_name=table_name,
+                schema_name=schema_name,
+                catalog_name=catalog_name,
+                temporary=temporary,
             )
+            cursor.adbc_statement.set_sql_query(query)
+            cursor.adbc_statement.execute_update()
         except adbc_driver_manager.Error as e:
             # Some databases have no way to do DROP IF EXISTS
             if not self.is_table_not_found(table_name=table_name, error=e):
