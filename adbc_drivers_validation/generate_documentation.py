@@ -320,7 +320,7 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
         for prop in testcase.findall(".//properties/property"):
             properties[prop.get("name")] = prop.get("value")
 
-        if "driver" not in properties:
+        if "driver" not in properties or not isinstance(properties["driver"], str):
             print(
                 "Warning: testcase is missing driver property, skipping:",
                 f"{module}.{name}",
@@ -511,14 +511,16 @@ def render(
     column_order = {
         vendor: list(sorted(columns[vendor].keys())) for vendor in vendor_order
     }
-    row_order = list(
-        sorted(
-            functools.reduce(
-                lambda a, b: a | b,
-                (set(c) for v in columns.values() for c in v.values()),
+    row_order = []
+    if columns:
+        row_order = list(
+            sorted(
+                functools.reduce(
+                    lambda a, b: a | b,
+                    (set(c) for v in columns.values() for c in v.values()),
+                )
             )
         )
-    )
     type_bind_ingest = []
     for k in row_order:
         all_cells = []
@@ -561,7 +563,7 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Create",
                 "suborder": 1,
-                "supported": type_table.ingest["create"],
+                "supported": type_table.ingest.get("create", False),
             }
         )
         rows.append(
@@ -571,7 +573,7 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Append",
                 "suborder": 2,
-                "supported": type_table.ingest["append"],
+                "supported": type_table.ingest.get("append", False),
             }
         )
         rows.append(
@@ -581,7 +583,7 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Create/Append",
                 "suborder": 3,
-                "supported": type_table.ingest["createappend"],
+                "supported": type_table.ingest.get("createappend", False),
             }
         )
         rows.append(
@@ -591,8 +593,8 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Replace",
                 "suborder": 4,
-                "supported": type_table.ingest["replace"]
-                and type_table.ingest["replace_noop"],
+                "supported": type_table.ingest.get("replace", False)
+                and type_table.ingest.get("replace_noop", False),
             }
         )
         rows.append(
@@ -602,7 +604,7 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Temporary Table",
                 "suborder": 5,
-                "supported": type_table.ingest["temporary"],
+                "supported": type_table.ingest.get("temporary", False),
             }
         )
         rows.append(
@@ -612,7 +614,7 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Target Catalog",
                 "suborder": 6,
-                "supported": type_table.ingest["catalog"],
+                "supported": type_table.ingest.get("catalog", False),
             }
         )
         rows.append(
@@ -622,7 +624,7 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Target Schema",
                 "suborder": 7,
-                "supported": type_table.ingest["schema"],
+                "supported": type_table.ingest.get("schema", False),
             }
         )
         rows.append(
@@ -632,7 +634,7 @@ def render(
                 "feature": "Bulk Ingestion",
                 "subfeature": "Non-nullable fields are marked NOT NULL",
                 "suborder": 8,
-                "supported": type_table.ingest["not_null"],
+                "supported": type_table.ingest.get("not_null", False),
             }
         )
         rows.append(
@@ -642,7 +644,7 @@ def render(
                 "feature": "Catalog (GetObjects)",
                 "subfeature": "depth=catalogs",
                 "suborder": 1,
-                "supported": type_table.get_objects["catalog"],
+                "supported": type_table.get_objects.get("catalog", False),
             }
         )
         rows.append(
@@ -652,7 +654,7 @@ def render(
                 "feature": "Catalog (GetObjects)",
                 "subfeature": "depth=db_schemas",
                 "suborder": 2,
-                "supported": type_table.get_objects["schema"],
+                "supported": type_table.get_objects.get("schema", False),
             }
         )
         rows.append(
@@ -662,7 +664,7 @@ def render(
                 "feature": "Catalog (GetObjects)",
                 "subfeature": "depth=tables",
                 "suborder": 3,
-                "supported": type_table.get_objects["table"],
+                "supported": type_table.get_objects.get("table", False),
             }
         )
         rows.append(
@@ -672,7 +674,7 @@ def render(
                 "feature": "Catalog (GetObjects)",
                 "subfeature": "depth=columns (all)",
                 "suborder": 4,
-                "supported": type_table.get_objects["column"],
+                "supported": type_table.get_objects.get("column", False),
             }
         )
         rows.append(
@@ -758,7 +760,7 @@ def render(
                 }
             )
 
-        span_cells = []
+        span_cells: list[tuple[int, str]] = []
         for i, cell in enumerate(row[3:]):
             if cell == "inconsistent":
                 cell = "⚠️" + report.add_footnote("Support varies based on version")
@@ -770,9 +772,9 @@ def render(
                 raise ValueError(f"Unexpected support value: {cell}")
 
             if i > 0 and cell == span_cells[-1][1]:
-                span_cells[-1][0] += 1
+                span_cells[-1] = (span_cells[-1][0] + 1, span_cells[-1][1])
             else:
-                span_cells.append([1, cell])
+                span_cells.append((1, cell))
 
         features[-1]["subfeatures"].append(
             {
