@@ -91,7 +91,7 @@ def scalar_to_py_smart(
     if value is None or not value.is_valid:
         return None
     elif isinstance(value, (pyarrow.Time32Scalar, pyarrow.Time64Scalar)):
-        # Needed because to_pylist uses the wrong object for times, losing precision...
+        # to_pylist raises if the precision can't be represented by stdlib
         match value.type.unit:
             case "s":
                 return NaiveTime(

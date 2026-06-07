@@ -18,11 +18,13 @@ Generate user documentation based on validation suite results.
 
 import collections
 import dataclasses
+import datetime
 import functools
 import html
 import json
 import typing
 import xml.etree.ElementTree
+import zoneinfo
 from pathlib import Path
 
 import bidict
@@ -817,6 +819,14 @@ def render(
     else:
         ref = f"driver-{driver}-{report.driver_version}"
         heading = f'[{{badge-primary}}`Driver Version|{report.driver_version}`](#{ref} "Permalink")'
+
+    # Assume the release date is the date that the docs are being
+    # generated. We've generally tagged the release and uploaded the same day;
+    # if not, then it can be edited by hand before merging the docs PR. Use
+    # PST as a reference explicitly.
+    tz = zoneinfo.ZoneInfo("America/Los_Angeles")
+    release_date = datetime.datetime.now(tz).strftime("%Y-%m-%d")
+    heading += f" {{badge-secondary}}`Release Date|{release_date}`"
 
     # TODO: Improve this display for drivers tested with many versions. We
     # probably want to show one badge with a range rather than a badge for every
