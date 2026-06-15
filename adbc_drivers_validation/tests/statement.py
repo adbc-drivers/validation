@@ -77,8 +77,9 @@ def generate_tests(
 
 class TestStatement:
     @pytest.fixture(scope="module")
+    @classmethod
     def sample_table(
-        self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
+        cls, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
     ) -> str:
         table_name = "sample_table"
         quoted_name = driver.quote_identifier(table_name)

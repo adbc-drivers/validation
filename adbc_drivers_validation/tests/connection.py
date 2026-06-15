@@ -742,8 +742,9 @@ class TestConnection:
                     assert column[field] == "YES"
 
     @pytest.fixture(scope="class")
+    @classmethod
     def get_objects_table(
-        self,
+        cls,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
     ) -> typing.Generator[tuple[str | None, str | None, str], None, None]:
@@ -780,8 +781,9 @@ class TestConnection:
                 driver.try_drop_table(cursor, table_name=table_name)
 
     @pytest.fixture(scope="class")
+    @classmethod
     def get_objects_constraints(
-        self,
+        cls,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
     ) -> None:
@@ -811,8 +813,9 @@ class TestConnection:
                     cursor.execute(stmt)
 
     @pytest.fixture(scope="function")
+    @classmethod
     def get_statistics_table(
-        self,
+        cls,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
     ) -> typing.Generator[tuple[str | None, str | None, str], None, None]:

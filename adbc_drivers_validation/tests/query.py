@@ -95,8 +95,9 @@ class TestQuery:
     """Tests that involve running queries."""
 
     @pytest.fixture(scope="module")
+    @classmethod
     def query_setup(
-        self,
+        cls,
         request: pytest.FixtureRequest,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
