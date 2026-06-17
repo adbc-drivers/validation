@@ -187,7 +187,7 @@ def arrow_type_name(
 def assert_field_type_name(
     driver: "DriverQuirks", query: "Query", schema: pyarrow.Schema
 ) -> None:
-    field_name = (f"{driver.name.upper()}:type").encode("utf-8")
+    field_name = (f"{driver.field_metadata_prefix}:type").encode("utf-8")
     if driver.features.metadata_type_name:
         for i, field in enumerate(schema):
             assert field.metadata is not None
