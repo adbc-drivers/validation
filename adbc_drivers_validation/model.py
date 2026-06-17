@@ -210,6 +210,11 @@ class DriverQuirks(abc.ABC):
     setup: DriverSetup
 
     @property
+    def field_metadata_prefix(self) -> str:
+        """The prefix for driver-specific field metadata like DRIVER:type."""
+        return self.name.upper()
+
+    @property
     @abc.abstractmethod
     def queries_paths(self) -> tuple[Path]: ...
 
