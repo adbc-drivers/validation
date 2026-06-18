@@ -140,22 +140,23 @@ class TestQuery:
         sql = subquery.query()
         expected_result = subquery.expected_result()
 
-        bind = subquery.bind_query(driver)
-        if bind:
-            # TODO: also test with stream
-            # TODO: also test with executequery, not executeupdate
-            # TODO: also test with multiple batches in stream
-            # TODO: also test with empty stream/empty batch
-            data = subquery.bind_data().combine_chunks().to_batches()[0]
-            with conn.cursor() as cursor:
-                cursor.adbc_statement.set_sql_query(bind)
-                cursor.adbc_statement.bind(data)
-                cursor.adbc_statement.execute_update()
+        with setup_connection(query, conn):
+            bind = subquery.bind_query(driver)
+            if bind:
+                # TODO: also test with stream
+                # TODO: also test with executequery, not executeupdate
+                # TODO: also test with multiple batches in stream
+                # TODO: also test with empty stream/empty batch
+                data = subquery.bind_data().combine_chunks().to_batches()[0]
+                with conn.cursor() as cursor:
+                    cursor.adbc_statement.set_sql_query(bind)
+                    cursor.adbc_statement.bind(data)
+                    cursor.adbc_statement.execute_update()
 
-        with conn.cursor() as cursor:
-            with setup_statement(query, cursor):
-                with scoped_trace(f"query: {sql}"):
-                    result = execute_query_without_prepare(cursor, sql)
+            with conn.cursor() as cursor:
+                with setup_statement(query, cursor):
+                    with scoped_trace(f"query: {sql}"):
+                        result = execute_query_without_prepare(cursor, sql)
 
         compare.compare_tables(expected_result, result, query.metadata())
         utils.assert_field_type_name(driver, query, result.schema)
@@ -170,11 +171,12 @@ class TestQuery:
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
         sql = subquery.query()
-        expected_schema = subquery.catalog_schema()
+        expected_schema = subquery.execute_schema()
 
-        with conn.cursor() as cursor:
-            with setup_statement(query, cursor):
-                schema = cursor.adbc_execute_schema(sql)
+        with setup_connection(query, conn):
+            with conn.cursor() as cursor:
+                with setup_statement(query, cursor):
+                    schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)
         utils.assert_field_type_name(driver, query, schema)

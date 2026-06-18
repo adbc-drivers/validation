@@ -96,7 +96,13 @@ class TxtCase:
             except tomllib.TOMLDecodeError as e:
                 e.add_note(f"Failed to parse TOML in 'metadata' part of {self._path}")
                 raise
-        if part in {"bind_schema", "expected_schema", "catalog_schema", "input_schema"}:
+        if part in {
+            "bind_schema",
+            "execute_schema",
+            "expected_schema",
+            "catalog_schema",
+            "input_schema",
+        }:
             try:
                 return arrowjson.loads_schema(value)
             except Exception as e:
