@@ -40,11 +40,22 @@ def split_statement(statement: str, dialect: str | None = None) -> list[str]:
             statements = []
             for stmt in parsed:
                 if not stmt:
+                    # This happens if the statement is ONLY a comment. Instead
+                    # of returning a Semicolon, sqlglot simply returns None.
+                    continue
+
+                # with the Snowflake dialect, which crucially supports inline
+                # comments:
+                #
+                #   SELECT 1; -- comment\nSELECT 2;
+                #     parses as a Select and a Semicolon
+                #   SELECT 1; \n --comment\nSELECT 2;
+                #     parses as two Selects
+                #
+                # hence we have to use AST to filter comments and NOT the repr
+                if isinstance(stmt, sqlglot.expressions.Semicolon):
                     continue
                 stmt_str = stmt.sql(dialect=dialect, pretty=False).rstrip(";").strip()
-                # Skip if it's a comment-only statement (starts with /* or --)
-                if stmt_str.startswith("/*") or stmt_str.startswith("--"):
-                    continue
                 if stmt_str:
                     statements.append(stmt_str)
             return statements if statements else [statement]
