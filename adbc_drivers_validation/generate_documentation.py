@@ -43,6 +43,19 @@ class GetQuirks(typing.Protocol):
 
 
 @dataclasses.dataclass
+class Span:
+    """A span of cells in a table."""
+
+    span: int
+    value: str
+
+    def __iter__(self) -> typing.Iterator[int | str]:
+        # Allow unpacking into (span, value) for the template
+        yield self.span
+        yield self.value
+
+
+@dataclasses.dataclass
 class CustomFeature:
     """A custom feature that a driver supports."""
 
@@ -465,7 +478,7 @@ def render(
     row_order = list(
         sorted(functools.reduce(lambda a, b: a | b, (set(c) for c in columns.values())))
     )
-    type_select = []
+    type_select: list[list[Span]] = []
     for k in row_order:
         all_cells = []
         for c in column_order:
@@ -479,12 +492,12 @@ def render(
             else:
                 all_cells.append("(NA/not tested)")
 
-        span_cells = [[1, k]]
+        span_cells = [Span(1, k)]
         for i, cell in enumerate(all_cells):
-            if i > 0 and cell == span_cells[-1][1]:
-                span_cells[-1][0] += 1
+            if i > 0 and cell == span_cells[-1].value:
+                span_cells[-1].span += 1
             else:
-                span_cells.append([1, cell])
+                span_cells.append(Span(1, cell))
         type_select.append(span_cells)
 
     template_vars["type_select"] = type_select
@@ -523,7 +536,7 @@ def render(
                 )
             )
         )
-    type_bind_ingest = []
+    type_bind_ingest: list[list[Span]] = []
     for k in row_order:
         all_cells = []
         for v in vendor_order:
@@ -535,12 +548,12 @@ def render(
                 else:
                     all_cells.append("(NA/not tested)")
 
-        span_cells = [[1, k]]
+        span_cells = [Span(1, k)]
         for i, cell in enumerate(all_cells):
-            if i > 0 and cell == span_cells[-1][1]:
-                span_cells[-1][0] += 1
+            if i > 0 and cell == span_cells[-1].value:
+                span_cells[-1].span += 1
             else:
-                span_cells.append([1, cell])
+                span_cells.append(Span(1, cell))
         type_bind_ingest.append(span_cells)
 
     template_vars["type_bind_ingest"] = type_bind_ingest
