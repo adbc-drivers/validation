@@ -249,6 +249,42 @@ def test_array_from_values_struct() -> None:
     assert actual == expected
 
 
+def test_array_from_values_parquet_variant_storage() -> None:
+    schema = arrowjson.loads_schema("""
+{
+    "format": "+s",
+    "children": [
+        {
+            "name": "res",
+            "format": "+s",
+            "flags": ["nullable"],
+            "metadata": {
+                "ARROW:extension:name": "arrow.parquet.variant",
+                "ARROW:extension:metadata": ""
+            },
+            "children": [
+                {"name": "metadata", "format": "z", "flags": []},
+                {"name": "value", "format": "z", "flags": ["nullable"]}
+            ]
+        }
+    ]
+}
+    """)
+
+    table = arrowjson.loads_table(
+        """
+{"res": {"metadata": "AQAA", "value": "CWhp"}}
+{"res": null}
+        """,
+        schema,
+    )
+
+    assert table.to_pylist() == [
+        {"res": {"metadata": b"\x01\x00\x00", "value": b"\x09hi"}},
+        {"res": None},
+    ]
+
+
 def test_parse_type_format_decimal() -> None:
     """Test decimal format parsing with various bitwidths and legacy format."""
     # Test decimal32 (precision 1-9)

@@ -22,6 +22,31 @@ import pyarrow
 month_day_nano_regexp = re.compile(r"(-?\d+)M(-?\d+)d(-?\d+)ns")
 
 
+def placeholder_value_for_type(data_type: pyarrow.DataType) -> typing.Any:
+    if (
+        pyarrow.types.is_binary(data_type)
+        or pyarrow.types.is_large_binary(data_type)
+        or pyarrow.types.is_fixed_size_binary(data_type)
+        or pyarrow.types.is_binary_view(data_type)
+    ):
+        return ""
+    elif pyarrow.types.is_boolean(data_type):
+        return False
+    elif pyarrow.types.is_integer(data_type):
+        return 0
+    elif pyarrow.types.is_floating(data_type):
+        return 0
+    elif pyarrow.types.is_decimal(data_type):
+        return "0"
+    elif pyarrow.types.is_string(data_type) or pyarrow.types.is_large_string(data_type):
+        return ""
+    elif isinstance(data_type, pyarrow.ListType):
+        return []
+    elif isinstance(data_type, pyarrow.StructType):
+        return {}
+    return None
+
+
 def load_schema(source: typing.TextIO) -> pyarrow.Schema:
     doc = json.load(source)
     return schema_from_dict(doc)
@@ -127,14 +152,28 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             mask=pyarrow.array(mask, type=pyarrow.bool_()) if field.nullable else None,
         )
     elif isinstance(field.type, pyarrow.StructType):
-        children, valid = structlike_from_rows(values, field.type.fields)
+        child_arrays = []
+        valid = [value is not None for value in values]
+        # Handle nullable structs with non-nullable children: fill None with placeholders
+        for child_field in field.type.fields:
+            child_values = []
+            for value in values:
+                if value is None:
+                    child_values.append(placeholder_value_for_type(child_field.type))
+                else:
+                    child_values.append(value.pop(child_field.name, None))
+            child_arrays.append(array_from_values(child_values, child_field))
+
         if not field.nullable:
             if not all(valid):
                 raise ValueError(
                     f"Field '{field.name}' is not nullable but contains None values"
                 )
+        for value in values:
+            if value:
+                raise ValueError(f"Extra fields in row: {value}")
         return pyarrow.StructArray.from_arrays(
-            children,
+            child_arrays,
             type=field.type,
             mask=pyarrow.array([not v for v in valid], type=pyarrow.bool_()),
         )

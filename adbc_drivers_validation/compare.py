@@ -22,7 +22,7 @@ import plpygis
 import pyarrow
 import whenever
 
-from . import query_metadata
+from . import query_metadata, utils, variant
 
 T = typing.TypeVar("T", pyarrow.Schema, pyarrow.Table)
 
@@ -90,6 +90,17 @@ def scalar_to_py_smart(
 
     if value is None or not value.is_valid:
         return None
+    elif extension_name == variant.VARIANT_EXTENSION_NAME:
+        storage = value.as_py()
+        if not isinstance(storage, dict):
+            raise ValueError(f"invalid Variant storage scalar: {storage!r}")
+        metadata = storage.get("metadata")
+        encoded_value = storage.get("value")
+        if encoded_value is None:
+            raise ValueError("shredded Variant values require residual value")
+        if not isinstance(metadata, bytes) or not isinstance(encoded_value, bytes):
+            raise ValueError(f"Invalid Variant storage scalar: {storage!r}")
+        return variant.parse_variant(metadata, encoded_value)
     elif isinstance(value, (pyarrow.Time32Scalar, pyarrow.Time64Scalar)):
         # to_pylist raises if the precision can't be represented by stdlib
         match value.type.unit:
@@ -168,6 +179,7 @@ def scalar_to_py_smart(
 
 def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
     """Convert a PyArrow Table to a list of dictionaries."""
+    # Use friendlier representations than PyArrow for better diffs
     rows = []
     for row_idx in range(table.num_rows):
         row = {}
@@ -175,14 +187,9 @@ def to_pylist(table: pyarrow.Table) -> list[dict[str, typing.Any]]:
             value = table.column(col_idx)[row_idx]
             field = table.schema[col_idx]
             col_name = field.name
-            ext = (
-                field.metadata.get(b"ARROW:extension:name", None)
-                if field.metadata
-                else None
+            row[col_name] = scalar_to_py_smart(
+                value, extension_name=utils.field_extension_name(field)
             )
-            if ext:
-                ext = ext.decode()
-            row[col_name] = scalar_to_py_smart(value, extension_name=ext)
         rows.append(row)
     return rows
 
@@ -317,7 +324,6 @@ def compare_tables(
 
     compare_schemas(expected.schema, actual.schema)
     if expected != actual:
-        # XXX: to_pylist uses the wrong object for times, losing precision...
         expected_repr = repr(expected.schema).splitlines() + [
             repr(line) for line in to_pylist(expected)
         ]
