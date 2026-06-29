@@ -48,6 +48,7 @@ import adbc_drivers_validation.variant as variant
         variant.VariantTimeMicros(86399999999),
         variant.VariantBinary(b"\x00\x01\x02"),
         variant.VariantString("Hello, world!"),
+        variant.VariantString("Hello, world!", force_long=True),
         variant.VariantUUID(uuid.UUID("12345678-1234-5678-1234-567812345678").bytes),
         variant.VariantArray(()),
         variant.VariantArray(

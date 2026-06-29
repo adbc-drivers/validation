@@ -286,7 +286,7 @@ class VariantBinary(VariantValue):
 @dataclasses.dataclass(frozen=True, repr=False)
 class VariantString(VariantValue):
     value: str
-    force_long: bool = dataclasses.field(default=False, compare=False, repr=False)
+    force_long: bool = dataclasses.field(default=False, compare=True, repr=True)
 
     def _encode_value(self, metadata: _VariantMetadataBuilder) -> bytes:
         encoded = self.value.encode("utf-8")
@@ -449,7 +449,9 @@ def _decode_variant_value(
                 end = start + size
                 if end > len(value):
                     raise ValueError("Invalid Variant string: length out of range")
-                return VariantString(value[start:end].decode("utf-8")), end
+                return VariantString(
+                    value[start:end].decode("utf-8"), force_long=True
+                ), end
             case 17:
                 return (
                     VariantTimeMicros(struct.unpack_from("<q", value, cursor)[0]),
@@ -481,7 +483,7 @@ def _decode_variant_value(
         end = cursor + size
         if end > len(value):
             raise ValueError("Invalid Variant short string: length out of range")
-        return VariantString(value[cursor:end].decode("utf-8")), end
+        return VariantString(value[cursor:end].decode("utf-8"), force_long=False), end
 
     elif basic_type == 2:
         offset_size = (value_header & 0x03) + 1

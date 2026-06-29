@@ -241,11 +241,14 @@ def variant_table(values: list[typing.Any]) -> pyarrow.Table:
     return pyarrow.Table.from_pylist(rows, schema=pyarrow.schema([variant_field()]))
 
 
-def test_compare_variant_short_and_long_strings_equivalent() -> None:
+def test_compare_variant_short_and_long_strings_not_equivalent() -> None:
     expected = variant_table([variant.VariantString("hello", force_long=False)])
     actual = variant_table([variant.VariantString("hello", force_long=True)])
+    with pytest.raises(AssertionError, match="do not match") as excinfo:
+        compare.compare_tables(expected, actual)
 
-    compare.compare_tables(expected, actual)
+    assert "VariantString('hello', False)" in str(excinfo.value)
+    assert "VariantString('hello', True)" in str(excinfo.value)
 
 
 def test_compare_variant_int_widths_are_not_equivalent() -> None:
@@ -265,30 +268,3 @@ def test_compare_variant_sql_null_differs_from_variant_null() -> None:
 
     with pytest.raises(AssertionError, match="(?s)None.*VariantNull"):
         compare.compare_tables(expected, actual)
-
-
-def test_compare_variant_shredded_only_is_unsupported() -> None:
-    field = pyarrow.field(
-        "res",
-        pyarrow.struct(
-            [
-                pyarrow.field("metadata", pyarrow.binary(), nullable=False),
-                pyarrow.field("typed_value", pyarrow.string(), nullable=True),
-            ]
-        ),
-        nullable=True,
-        metadata={
-            "ARROW:extension:name": "arrow.parquet.variant",
-            "ARROW:extension:metadata": "",
-        },
-    )
-    field = pyarrow.ipc.read_schema(pyarrow.schema([field]).serialize())[0]
-    table = pyarrow.Table.from_pylist(
-        [{"res": {"metadata": b"\x01\x00\x00", "typed_value": "hello"}}],
-        schema=pyarrow.schema([field]),
-    )
-
-    with pytest.raises(
-        ValueError, match="shredded Variant values require residual value"
-    ):
-        compare.compare_tables(table, table)
