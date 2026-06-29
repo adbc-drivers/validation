@@ -268,3 +268,17 @@ def test_compare_variant_sql_null_differs_from_variant_null() -> None:
 
     with pytest.raises(AssertionError, match="(?s)None.*VariantNull"):
         compare.compare_tables(expected, actual)
+
+
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        pytest.param(b"\x0c", id="int8"),
+        pytest.param(b"\x20", id="decimal4_scale"),
+        pytest.param(b"\x20\x02", id="decimal4_value"),
+        pytest.param(b"\x50", id="uuid"),
+    ],
+)
+def test_variant_truncated_fixed_size_values_raise_value_error(encoded: bytes) -> None:
+    with pytest.raises(ValueError, match="truncated"):
+        variant.parse_variant(b"\x01\x00\x00", encoded)

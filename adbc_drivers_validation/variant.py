@@ -21,6 +21,7 @@ we won't need this.
 
 import dataclasses
 import struct
+import typing
 
 VARIANT_EXTENSION_NAME = "arrow.parquet.variant"
 
@@ -42,6 +43,25 @@ def _read_unsigned(data: bytes, offset: int, size: int) -> int:
     if offset + size > len(data):
         raise ValueError("Invalid Variant bytes: truncated unsigned integer")
     return int.from_bytes(data[offset : offset + size], "little")
+
+
+def _read_byte(data: bytes, offset: int) -> int:
+    if offset >= len(data):
+        raise ValueError("Invalid Variant value: truncated byte")
+    return data[offset]
+
+
+def _read_exact(data: bytes, offset: int, size: int) -> bytes:
+    end = offset + size
+    if end > len(data):
+        raise ValueError("Invalid Variant value: truncated fixed-size value")
+    return data[offset:end]
+
+
+def _unpack_from(format_: str, data: bytes, offset: int) -> typing.Any:
+    size = struct.calcsize(format_)
+    _read_exact(data, offset, size)
+    return struct.unpack_from(format_, data, offset)[0]
 
 
 def _write_unsigned(value: int, size: int) -> bytes:
@@ -382,60 +402,46 @@ def _decode_variant_value(
             case 2:
                 return VariantBool(False), cursor
             case 3:
-                return VariantInt8(
-                    struct.unpack_from("<b", value, cursor)[0]
-                ), cursor + 1
+                return VariantInt8(_unpack_from("<b", value, cursor)), cursor + 1
             case 4:
-                return VariantInt16(
-                    struct.unpack_from("<h", value, cursor)[0]
-                ), cursor + 2
+                return VariantInt16(_unpack_from("<h", value, cursor)), cursor + 2
             case 5:
-                return VariantInt32(
-                    struct.unpack_from("<i", value, cursor)[0]
-                ), cursor + 4
+                return VariantInt32(_unpack_from("<i", value, cursor)), cursor + 4
             case 6:
-                return VariantInt64(
-                    struct.unpack_from("<q", value, cursor)[0]
-                ), cursor + 8
+                return VariantInt64(_unpack_from("<q", value, cursor)), cursor + 8
             case 7:
-                return VariantDouble(
-                    struct.unpack_from("<d", value, cursor)[0]
-                ), cursor + 8
+                return VariantDouble(_unpack_from("<d", value, cursor)), cursor + 8
             case 8:
-                scale = value[cursor]
-                number = struct.unpack_from("<i", value, cursor + 1)[0]
+                scale = _read_byte(value, cursor)
+                number = _unpack_from("<i", value, cursor + 1)
                 return VariantDecimal4(scale, number), cursor + 5
             case 9:
-                scale = value[cursor]
-                number = struct.unpack_from("<q", value, cursor + 1)[0]
+                scale = _read_byte(value, cursor)
+                number = _unpack_from("<q", value, cursor + 1)
                 return VariantDecimal8(scale, number), cursor + 9
             case 10:
-                scale = value[cursor]
+                scale = _read_byte(value, cursor)
                 number = int.from_bytes(
-                    value[cursor + 1 : cursor + 17], "little", signed=True
+                    _read_exact(value, cursor + 1, 16), "little", signed=True
                 )
                 return VariantDecimal16(scale, number), cursor + 17
             case 11:
-                return VariantDate(
-                    struct.unpack_from("<i", value, cursor)[0]
-                ), cursor + 4
+                return VariantDate(_unpack_from("<i", value, cursor)), cursor + 4
             case 12:
                 return (
                     VariantTimestampMicros(
-                        struct.unpack_from("<q", value, cursor)[0],
+                        _unpack_from("<q", value, cursor),
                         utc=True,
                     ),
                     cursor + 8,
                 )
             case 13:
                 return (
-                    VariantTimestampMicros(struct.unpack_from("<q", value, cursor)[0]),
+                    VariantTimestampMicros(_unpack_from("<q", value, cursor)),
                     cursor + 8,
                 )
             case 14:
-                return VariantFloat(
-                    struct.unpack_from("<f", value, cursor)[0]
-                ), cursor + 4
+                return VariantFloat(_unpack_from("<f", value, cursor)), cursor + 4
             case 15:
                 size = _read_unsigned(value, cursor, 4)
                 start = cursor + 4
@@ -454,27 +460,24 @@ def _decode_variant_value(
                 ), end
             case 17:
                 return (
-                    VariantTimeMicros(struct.unpack_from("<q", value, cursor)[0]),
+                    VariantTimeMicros(_unpack_from("<q", value, cursor)),
                     cursor + 8,
                 )
             case 18:
                 return (
                     VariantTimestampNanos(
-                        struct.unpack_from("<q", value, cursor)[0],
+                        _unpack_from("<q", value, cursor),
                         utc=True,
                     ),
                     cursor + 8,
                 )
             case 19:
                 return (
-                    VariantTimestampNanos(struct.unpack_from("<q", value, cursor)[0]),
+                    VariantTimestampNanos(_unpack_from("<q", value, cursor)),
                     cursor + 8,
                 )
             case 20:
-                end = cursor + 16
-                if end > len(value):
-                    raise ValueError("Invalid Variant UUID: truncated value")
-                return VariantUUID(value[cursor:end]), end
+                return VariantUUID(_read_exact(value, cursor, 16)), cursor + 16
             case _:
                 raise ValueError(f"Unsupported Variant primitive type: {value_header}")
 

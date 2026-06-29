@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import base64
+import datetime
 import decimal
 import io
 
@@ -247,6 +248,105 @@ def test_array_from_values_struct() -> None:
         type=field.type,
     )
     assert actual == expected
+
+
+def test_array_from_values_nullable_struct_with_nonnullable_children() -> None:
+    field = pyarrow.field(
+        "struct_field",
+        pyarrow.struct(
+            [
+                pyarrow.field("boolean", pyarrow.bool_(), nullable=False),
+                pyarrow.field("int", pyarrow.int32(), nullable=False),
+                pyarrow.field("float", pyarrow.float64(), nullable=False),
+                pyarrow.field("decimal", pyarrow.decimal128(10, 2), nullable=False),
+                pyarrow.field("binary", pyarrow.binary(), nullable=False),
+                pyarrow.field("string", pyarrow.string(), nullable=False),
+                pyarrow.field("date", pyarrow.date32(), nullable=False),
+                pyarrow.field("time", pyarrow.time64("us"), nullable=False),
+                pyarrow.field("timestamp", pyarrow.timestamp("us"), nullable=False),
+                pyarrow.field("duration", pyarrow.duration("us"), nullable=False),
+                pyarrow.field(
+                    "month_day_nano",
+                    pyarrow.month_day_nano_interval(),
+                    nullable=False,
+                ),
+                pyarrow.field(
+                    "list",
+                    pyarrow.list_(pyarrow.field("item", pyarrow.int32())),
+                    nullable=False,
+                ),
+                pyarrow.field(
+                    "large_list",
+                    pyarrow.large_list(pyarrow.field("item", pyarrow.string())),
+                    nullable=False,
+                ),
+                pyarrow.field(
+                    "fixed_size_list",
+                    pyarrow.list_(pyarrow.field("item", pyarrow.int32()), 2),
+                    nullable=False,
+                ),
+                pyarrow.field(
+                    "map",
+                    pyarrow.map_(pyarrow.string(), pyarrow.int32()),
+                    nullable=False,
+                ),
+                pyarrow.field(
+                    "struct",
+                    pyarrow.struct(
+                        [pyarrow.field("nested", pyarrow.int32(), nullable=False)]
+                    ),
+                    nullable=False,
+                ),
+            ]
+        ),
+        nullable=True,
+    )
+
+    values = [
+        None,
+        {
+            "boolean": True,
+            "int": 1,
+            "float": 1.25,
+            "decimal": "12.34",
+            "binary": base64.b64encode(b"hello").decode("utf-8"),
+            "string": "hello",
+            "date": 1,
+            "time": 2,
+            "timestamp": 3,
+            "duration": 4,
+            "month_day_nano": "1M2d3ns",
+            "list": [1, 2],
+            "large_list": ["a", "b"],
+            "fixed_size_list": [3, 4],
+            "map": [("a", 1), ("b", 2)],
+            "struct": {"nested": 5},
+        },
+    ]
+
+    actual = arrowjson.array_from_values(values, field)
+
+    assert actual.to_pylist() == [
+        None,
+        {
+            "boolean": True,
+            "int": 1,
+            "float": 1.25,
+            "decimal": decimal.Decimal("12.34"),
+            "binary": b"hello",
+            "string": "hello",
+            "date": datetime.date(1970, 1, 2),
+            "time": datetime.time(0, 0, 0, 2),
+            "timestamp": datetime.datetime(1970, 1, 1, 0, 0, 0, 3),
+            "duration": datetime.timedelta(microseconds=4),
+            "month_day_nano": pyarrow.MonthDayNano([1, 2, 3]),
+            "list": [1, 2],
+            "large_list": ["a", "b"],
+            "fixed_size_list": [3, 4],
+            "map": [("a", 1), ("b", 2)],
+            "struct": {"nested": 5},
+        },
+    ]
 
 
 def test_array_from_values_parquet_variant_storage() -> None:
