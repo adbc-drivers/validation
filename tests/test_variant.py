@@ -108,3 +108,43 @@ def test_object_primitive() -> None:
             ("timestamp_field", variant.VariantString("2025-04-16T12:34:56.78")),
         )
     )
+
+
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        pytest.param(
+            b"\x03\x01\x00\x01\x0c\x01",
+            id="element_reads_past_declared_payload",
+        ),
+        pytest.param(
+            b"\x03\x02\x00\x02\x01\x0c\x01\x0c\x02",
+            id="non_monotonic_offsets",
+        ),
+    ],
+)
+def test_array_rejects_invalid_offsets(encoded: bytes) -> None:
+    with pytest.raises(ValueError, match="Invalid Variant array"):
+        variant.parse_variant(b"\x01\x00\x00", encoded)
+
+
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        pytest.param(
+            b"\x02\x01\x00\x00\x01\x0c\x01",
+            id="field_reads_past_declared_payload",
+        ),
+        pytest.param(
+            b"\x02\x02\x00\x01\x00\x02\x01\x0c\x01\x0c\x02",
+            id="field_start_past_declared_payload",
+        ),
+    ],
+)
+def test_object_rejects_invalid_offsets(encoded: bytes) -> None:
+    metadata, _ = variant.VariantObject(
+        (("a", variant.VariantNull()), ("b", variant.VariantNull()))
+    ).to_variant_bytes()
+
+    with pytest.raises(ValueError, match="Invalid Variant object"):
+        variant.parse_variant(metadata, encoded)

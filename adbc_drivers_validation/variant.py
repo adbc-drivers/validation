@@ -45,6 +45,39 @@ def _read_unsigned(data: bytes, offset: int, size: int) -> int:
     return int.from_bytes(data[offset : offset + size], "little")
 
 
+def _validate_array_offsets(offsets: list[int]) -> None:
+    if not offsets or offsets[0] != 0:
+        raise ValueError("Invalid Variant array: offsets must start at 0")
+    for previous, current in zip(offsets, offsets[1:]):
+        if current < previous:
+            raise ValueError("Invalid Variant array: offsets must be monotonic")
+
+
+def _object_field_boundaries(
+    field_offsets: list[int], data_size: int
+) -> dict[int, int]:
+    if data_size == 0:
+        if field_offsets:
+            raise ValueError("Invalid Variant object: field offset out of range")
+        return {}
+
+    if 0 not in field_offsets:
+        raise ValueError("Invalid Variant object: field offsets must include 0")
+    if len(set(field_offsets)) != len(field_offsets):
+        raise ValueError("Invalid Variant object: duplicate field offset")
+    for field_offset in field_offsets:
+        if field_offset >= data_size:
+            raise ValueError("Invalid Variant object: field offset out of range")
+
+    sorted_offsets = sorted(field_offsets)
+    return {
+        field_offset: next_field_offset
+        for field_offset, next_field_offset in zip(
+            sorted_offsets, [*sorted_offsets[1:], data_size]
+        )
+    }
+
+
 def _read_byte(data: bytes, offset: int) -> int:
     if offset >= len(data):
         raise ValueError("Invalid Variant value: truncated byte")
@@ -506,18 +539,22 @@ def _decode_variant_value(
         cursor += (count + 1) * offset_size
         data_start = cursor
         fields = []
-        max_end = data_start + offsets[-1]
-        if max_end > len(value):
+        field_offsets = offsets[:-1]
+        data_size = offsets[-1]
+        boundaries = _object_field_boundaries(field_offsets, data_size)
+        data_end = data_start + data_size
+        if data_end > len(value):
             raise ValueError("Invalid Variant object: field data out of range")
-        for field_id, field_offset in zip(ids, offsets):
+        for field_id, field_offset in zip(ids, field_offsets):
             if field_id >= len(metadata):
                 raise ValueError("Invalid Variant object: field ID out of range")
             field_value, field_end = _decode_variant_value(
                 metadata, value, data_start + field_offset
             )
+            if field_end != data_start + boundaries[field_offset]:
+                raise ValueError("Invalid Variant object: field length mismatch")
             fields.append((metadata[field_id], field_value))
-            max_end = max(max_end, field_end)
-        return VariantObject(tuple(fields)), max_end
+        return VariantObject(tuple(fields)), data_end
 
     elif basic_type == 3:
         offset_size = (value_header & 0x03) + 1
@@ -528,19 +565,21 @@ def _decode_variant_value(
             _read_unsigned(value, cursor + (index * offset_size), offset_size)
             for index in range(count + 1)
         ]
+        _validate_array_offsets(offsets)
         cursor += (count + 1) * offset_size
         data_start = cursor
-        if data_start + offsets[-1] > len(value):
+        data_end = data_start + offsets[-1]
+        if data_end > len(value):
             raise ValueError("Invalid Variant array: element data out of range")
         values = []
-        max_end = data_start + offsets[-1]
-        for item_offset in offsets[:-1]:
+        for item_offset, next_item_offset in zip(offsets, offsets[1:]):
             item, item_end = _decode_variant_value(
                 metadata, value, data_start + item_offset
             )
+            if item_end != data_start + next_item_offset:
+                raise ValueError("Invalid Variant array: element length mismatch")
             values.append(item)
-            max_end = max(max_end, item_end)
-        return VariantArray(tuple(values)), max_end
+        return VariantArray(tuple(values)), data_end
 
     raise ValueError(f"Unsupported Variant basic type: {basic_type}")
 
