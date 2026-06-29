@@ -18,6 +18,7 @@ import pyarrow
 import pytest
 
 import adbc_drivers_validation.compare as compare
+import adbc_drivers_validation.variant as variant
 
 
 def test_compare_fields() -> None:
@@ -209,3 +210,75 @@ def test_sort_oblivious(
 ) -> None:
     result = compare.sort_oblivious(table, sort_keys)
     assert result.equals(expected)
+
+
+def variant_field() -> pyarrow.Field:
+    field = pyarrow.field(
+        "res",
+        pyarrow.struct(
+            [
+                pyarrow.field("metadata", pyarrow.binary(), nullable=False),
+                pyarrow.field("value", pyarrow.binary(), nullable=True),
+            ]
+        ),
+        nullable=True,
+        metadata={
+            "ARROW:extension:name": "arrow.parquet.variant",
+            "ARROW:extension:metadata": "",
+        },
+    )
+    return pyarrow.ipc.read_schema(pyarrow.schema([field]).serialize())[0]
+
+
+def variant_table(values: list[typing.Any]) -> pyarrow.Table:
+    rows = []
+    for value in values:
+        if value is None:
+            rows.append({"res": None})
+        else:
+            metadata, encoded_value = value.to_variant_bytes()
+            rows.append({"res": {"metadata": metadata, "value": encoded_value}})
+    return pyarrow.Table.from_pylist(rows, schema=pyarrow.schema([variant_field()]))
+
+
+def test_compare_variant_short_and_long_strings_not_equivalent() -> None:
+    expected = variant_table([variant.VariantString("hello", force_long=False)])
+    actual = variant_table([variant.VariantString("hello", force_long=True)])
+    with pytest.raises(AssertionError, match="do not match") as excinfo:
+        compare.compare_tables(expected, actual)
+
+    assert "VariantString('hello', False)" in str(excinfo.value)
+    assert "VariantString('hello', True)" in str(excinfo.value)
+
+
+def test_compare_variant_int_widths_are_not_equivalent() -> None:
+    expected = variant_table([variant.VariantInt8(42)])
+    actual = variant_table([variant.VariantInt64(42)])
+
+    with pytest.raises(
+        AssertionError,
+        match="(?s)VariantInt8\\(42\\).*VariantInt64\\(42\\)",
+    ):
+        compare.compare_tables(expected, actual)
+
+
+def test_compare_variant_sql_null_differs_from_variant_null() -> None:
+    expected = variant_table([None])
+    actual = variant_table([variant.VariantNull()])
+
+    with pytest.raises(AssertionError, match="(?s)None.*VariantNull"):
+        compare.compare_tables(expected, actual)
+
+
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        pytest.param(b"\x0c", id="int8"),
+        pytest.param(b"\x20", id="decimal4_scale"),
+        pytest.param(b"\x20\x02", id="decimal4_value"),
+        pytest.param(b"\x50", id="uuid"),
+    ],
+)
+def test_variant_truncated_fixed_size_values_raise_value_error(encoded: bytes) -> None:
+    with pytest.raises(ValueError, match="truncated"):
+        variant.parse_variant(b"\x01\x00\x00", encoded)

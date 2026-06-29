@@ -802,6 +802,7 @@ def render(
 
     # TODO: restore support for driver-specific features (we don't really use
     # this right now)
+    # TODO: the ordering of different subvendors isn't consistent
     features = render_part(
         env.get_template("features.md"),
         {
@@ -847,6 +848,7 @@ def render(
     for version in sorted(
         report.versions, key=lambda v: (vendor_sort[v.vendor][0], v.version)
     ):
+        # TODO: allow omitting version when it's meaningless (e.g. cloud services)
         friendly_vendor = vendor_sort[version.vendor][1]
         heading += (
             f" {{badge-success}}`Tested With|{friendly_vendor} {version.version}`"

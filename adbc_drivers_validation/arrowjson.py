@@ -22,6 +22,70 @@ import pyarrow
 month_day_nano_regexp = re.compile(r"(-?\d+)M(-?\d+)d(-?\d+)ns")
 
 
+def placeholder_value_for_type(data_type: pyarrow.DataType) -> typing.Any:
+    # When we have a nullable struct with non-null children, we need to
+    # generate placeholders for a toplevel struct null's children
+    if pyarrow.types.is_null(data_type):
+        # This is kind of a contradiction, but there's no way around it
+        return None
+    elif pyarrow.types.is_fixed_size_binary(data_type):
+        return base64.b64encode(b"\x00" * data_type.byte_width).decode("ascii")
+    elif (
+        pyarrow.types.is_binary(data_type)
+        or pyarrow.types.is_large_binary(data_type)
+        or pyarrow.types.is_binary_view(data_type)
+    ):
+        return b""
+    elif pyarrow.types.is_boolean(data_type):
+        return False
+    elif pyarrow.types.is_integer(data_type):
+        return 0
+    elif pyarrow.types.is_floating(data_type):
+        return 0.0
+    elif pyarrow.types.is_decimal(data_type):
+        return "0"
+    elif (
+        pyarrow.types.is_string(data_type)
+        or pyarrow.types.is_large_string(data_type)
+        or pyarrow.types.is_string_view(data_type)
+    ):
+        return ""
+    elif pyarrow.types.is_date(data_type):
+        return 0
+    elif pyarrow.types.is_time(data_type):
+        return 0
+    elif pyarrow.types.is_timestamp(data_type):
+        return 0
+    elif pyarrow.types.is_duration(data_type):
+        return 0
+    elif pyarrow.types.is_interval(data_type):
+        return "0M0d0ns"
+    elif pyarrow.types.is_fixed_size_list(data_type):
+        return [
+            placeholder_value_for_type(data_type.value_type)
+            for _ in range(data_type.list_size)
+        ]
+    elif (
+        pyarrow.types.is_list(data_type)
+        or pyarrow.types.is_large_list(data_type)
+        or pyarrow.types.is_list_view(data_type)
+        or pyarrow.types.is_large_list_view(data_type)
+    ):
+        return []
+    elif pyarrow.types.is_map(data_type):
+        return []
+    elif pyarrow.types.is_struct(data_type):
+        return {
+            field.name: placeholder_value_for_type(field.type)
+            for field in data_type.fields
+        }
+    elif pyarrow.types.is_dictionary(data_type):
+        return placeholder_value_for_type(data_type.value_type)
+    elif isinstance(data_type, (pyarrow.ExtensionType, pyarrow.BaseExtensionType)):
+        return placeholder_value_for_type(data_type.storage_type)
+    raise NotImplementedError(f"Unsupported type for struct placeholder: {data_type}")
+
+
 def load_schema(source: typing.TextIO) -> pyarrow.Schema:
     doc = json.load(source)
     return schema_from_dict(doc)
@@ -127,14 +191,28 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             mask=pyarrow.array(mask, type=pyarrow.bool_()) if field.nullable else None,
         )
     elif isinstance(field.type, pyarrow.StructType):
-        children, valid = structlike_from_rows(values, field.type.fields)
+        child_arrays = []
+        valid = [value is not None for value in values]
+        # Handle nullable structs with non-nullable children: fill None with placeholders
+        for child_field in field.type.fields:
+            child_values = []
+            for value in values:
+                if value is None:
+                    child_values.append(placeholder_value_for_type(child_field.type))
+                else:
+                    child_values.append(value.pop(child_field.name, None))
+            child_arrays.append(array_from_values(child_values, child_field))
+
         if not field.nullable:
             if not all(valid):
                 raise ValueError(
                     f"Field '{field.name}' is not nullable but contains None values"
                 )
+        for value in values:
+            if value:
+                raise ValueError(f"Extra fields in row: {value}")
         return pyarrow.StructArray.from_arrays(
-            children,
+            child_arrays,
             type=field.type,
             mask=pyarrow.array([not v for v in valid], type=pyarrow.bool_()),
         )

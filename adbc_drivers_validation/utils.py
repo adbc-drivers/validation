@@ -251,3 +251,12 @@ def generate_tests_by_marks(
         indirect=["driver"],
     )
     return True
+
+
+def field_extension_name(field: pyarrow.Field) -> str | None:
+    if not field.metadata:
+        return None
+    extension_name = field.metadata.get(b"ARROW:extension:name")
+    if extension_name is None:
+        return None
+    return extension_name.decode("utf-8")
