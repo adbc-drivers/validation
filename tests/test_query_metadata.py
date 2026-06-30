@@ -190,3 +190,40 @@ def test_load_all_txtcase(path: Path) -> None:
     except KeyError:
         return
     QueryMetadata.model_validate(data)
+
+
+def test_metadata_type_name() -> None:
+    tags = TagsMetadata.model_validate(
+        {
+            "sql-type-name": "VARCHAR",
+            "field-type-name": {
+                "default": ["VARCHAR_DEFAULT", "VARCHAR_DEFAULT2"],
+                "query": "VARCHAR_QUERY",
+                "execute-schema": ["VARCHAR1", "VARCHAR_EXECUTE_SCHEMA"],
+                "get-table-schema": None,
+            },
+        }
+    )
+    assert tags.metadata_type_name("query", 0) == "VARCHAR_QUERY"
+    assert tags.metadata_type_name("query", 1) == "VARCHAR_QUERY"
+    assert tags.metadata_type_name("execute_schema", 0) == "VARCHAR1"
+    assert tags.metadata_type_name("execute_schema", 1) == "VARCHAR_EXECUTE_SCHEMA"
+    assert tags.metadata_type_name("get_table_schema", 0) == "VARCHAR_DEFAULT"
+    assert tags.metadata_type_name("get_table_schema", 1) == "VARCHAR_DEFAULT2"
+
+    tags = TagsMetadata.model_validate(
+        {
+            "sql-type-name": "VARCHAR",
+            "field-type-name": {
+                "query": "VARCHAR_QUERY",
+                "execute-schema": ["VARCHAR1", "VARCHAR_EXECUTE_SCHEMA"],
+                "get-table-schema": None,
+            },
+        }
+    )
+    assert tags.metadata_type_name("query", 0) == "VARCHAR_QUERY"
+    assert tags.metadata_type_name("query", 1) == "VARCHAR_QUERY"
+    assert tags.metadata_type_name("execute_schema", 0) == "VARCHAR1"
+    assert tags.metadata_type_name("execute_schema", 1) == "VARCHAR_EXECUTE_SCHEMA"
+    assert tags.metadata_type_name("get_table_schema", 0) == "VARCHAR"
+    assert tags.metadata_type_name("get_table_schema", 1) == "VARCHAR"

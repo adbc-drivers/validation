@@ -159,7 +159,7 @@ class TestQuery:
                         result = execute_query_without_prepare(cursor, sql)
 
         compare.compare_tables(expected_result, result, query.metadata())
-        utils.assert_field_type_name(driver, query, result.schema)
+        utils.assert_field_type_name(driver, "query", query, result.schema)
 
     def test_execute_schema(
         self,
@@ -179,7 +179,7 @@ class TestQuery:
                     schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)
-        utils.assert_field_type_name(driver, query, schema)
+        utils.assert_field_type_name(driver, "execute_schema", query, schema)
 
     def test_get_table_schema(
         self,
@@ -212,8 +212,7 @@ class TestQuery:
         # Ignore the first column which is normally used to sort the table
         schema = pyarrow.schema(list(schema)[1:])
         compare.compare_schemas(expected_schema, schema)
-
-        utils.assert_field_type_name(driver, query, schema)
+        utils.assert_field_type_name(driver, "get_table_schema", query, schema)
 
     def test_show_queries(
         self,

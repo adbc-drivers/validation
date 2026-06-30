@@ -100,12 +100,33 @@ class SetupMetadata(BaseModel):
     )
 
 
+class FieldTypeName(BaseModel):
+    """What VENDOR:type metadata to expect in different contexts."""
+
+    # Some drivers/configs are inconsistent, e.g. when getting the schema of a
+    # table, one type may be returned, but when querying that table, a less
+    # specific type may be returned.
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_by_alias=True,
+        validate_by_name=True,
+    )
+
+    default: str | list[str] | None = Field(default=None)
+    query: str | list[str] | None = Field(default=None)
+    execute_schema: str | list[str] | None = Field(default=None, alias="execute-schema")
+    get_table_schema: str | list[str] | None = Field(
+        default=None, alias="get-table-schema"
+    )
+
+
 class TagsMetadata(BaseModel):
     """Tags metadata for a query."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    field_type_name: str | list[str] | None = Field(
+    field_type_name: str | list[str] | FieldTypeName | None = Field(
         default=None,
         alias="field-type-name",
         description="The name of the type in field metadata (in the `VENDOR:type` property). Defaults to sql-type-name.",
@@ -144,9 +165,30 @@ class TagsMetadata(BaseModel):
         description="A variant name to distinguish this query from others with the same SQL type (for documentation).",
     )
 
-    def metadata_type_name(self, position: int) -> str | None:
+    def metadata_type_name(
+        self,
+        context: typing.Literal["query", "execute_schema", "get_table_schema"],
+        position: int,
+    ) -> str | None:
         """Type name used in field metadata."""
-        if isinstance(self.field_type_name, list):
+        if isinstance(self.field_type_name, FieldTypeName):
+            candidate = None
+            if context == "query":
+                candidate = self.field_type_name.query
+            elif context == "execute_schema":
+                candidate = self.field_type_name.execute_schema
+            elif context == "get_table_schema":
+                candidate = self.field_type_name.get_table_schema
+            else:
+                raise ValueError(f"unknown context: {context}")
+
+            if candidate is None:
+                candidate = self.field_type_name.default or self.sql_type_name
+
+            if isinstance(candidate, list):
+                return candidate[position]
+            return candidate
+        elif isinstance(self.field_type_name, list):
             return self.field_type_name[position]
         return self.field_type_name or self.sql_type_name
 
