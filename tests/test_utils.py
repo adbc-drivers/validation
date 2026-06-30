@@ -28,3 +28,25 @@ def test_scoped_trace() -> None:
     assert "original error" in str(excinfo.value)
     tb = "".join(traceback.format_exception(excinfo.value))
     assert "additional context" in tb
+
+
+def test_merge_into() -> None:
+    target = {}
+    values = {"a": 1, "b": {"c": 2}}
+    utils.merge_into(target, values)
+    assert target == {"a": 1, "b": {"c": 2}}
+
+    target = {"b": {"d": 3}}
+    values = {"a": 1, "b": {"c": 2}}
+    utils.merge_into(target, values)
+    assert target == {"a": 1, "b": {"c": 2, "d": 3}}
+
+    target = {"a": [1]}
+    values = {"a": [2, 3]}
+    utils.merge_into(target, values)
+    assert target == {"a": [2, 3]}
+
+    target = {"a": [1]}
+    values = {"a": {"b": 2}}
+    utils.merge_into(target, values)
+    assert target == {"a": {"b": 2}}

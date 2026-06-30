@@ -26,16 +26,21 @@ if typing.TYPE_CHECKING:
 
 def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> None:
     """Recursively merge two dictionaries."""
-    for key, value in values.items():
-        if isinstance(value, dict):
-            if key in target:
-                merge_into(target[key], value)
+    try:
+        for key, value in values.items():
+            if isinstance(value, dict):
+                # Allow a dict on the right to simply override the value on the left
+                if key in target and isinstance(target[key], dict):
+                    merge_into(target[key], value)
+                else:
+                    target[key] = value.copy()
+            elif isinstance(value, list):
+                target[key] = value[:]
             else:
-                target[key] = value.copy()
-        elif isinstance(value, list):
-            target[key] = value[:]
-        else:
-            target[key] = value
+                target[key] = value
+    except Exception as e:
+        e.add_note(f"While merging into {target!r} with {values!r}")
+        raise
 
 
 @contextlib.contextmanager
@@ -185,7 +190,10 @@ def arrow_type_name(
 
 
 def assert_field_type_name(
-    driver: "DriverQuirks", query: "Query", schema: pyarrow.Schema
+    driver: "DriverQuirks",
+    context: typing.Literal["query", "execute_schema", "get_table_schema"],
+    query: "Query",
+    schema: pyarrow.Schema,
 ) -> None:
     field_name = (f"{driver.field_metadata_prefix}:type").encode("utf-8")
     if driver.features.metadata_type_name:
@@ -194,7 +202,7 @@ def assert_field_type_name(
             assert field_name in field.metadata
             assert field.metadata[field_name].decode(
                 "utf-8"
-            ) == query.metadata().tags.metadata_type_name(i)
+            ) == query.metadata().tags.metadata_type_name(context, i)
     else:
         for field in schema:
             if field.metadata is not None:
