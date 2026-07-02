@@ -763,7 +763,9 @@ def render(
     )
 
     features = []
-    vendors = raw_features.columns[3:]
+    # list of (index, ord, vendor_name)
+    vendors = [(i,) + vendor_sort[v] for i, v in enumerate(raw_features.columns[3:])]
+    vendors.sort(key=lambda v: v[1])
     for row in raw_features.fetchall():
         group = row[0]
         subgroup = row[1] or ""
@@ -776,7 +778,8 @@ def render(
             )
 
         span_cells: list[tuple[int, str]] = []
-        for i, cell in enumerate(row[3:]):
+        for i, (index, _, _) in enumerate(vendors):
+            cell = row[3 + index]
             if cell == "inconsistent":
                 cell = "⚠️" + report.add_footnote("Support varies based on version")
             elif cell == "supported":
@@ -798,11 +801,9 @@ def render(
             }
         )
 
-    vendors = [vendor_sort[v][1] for v in vendors]
-
+    vendors = [v[2] for v in vendors]
     # TODO: restore support for driver-specific features (we don't really use
     # this right now)
-    # TODO: the ordering of different subvendors isn't consistent
     features = render_part(
         env.get_template("features.md"),
         {
