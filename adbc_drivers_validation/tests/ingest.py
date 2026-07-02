@@ -152,6 +152,8 @@ class TestIngest:
         # metadata
         expected = subquery.expected()
         compare.compare_tables(expected, result, query.metadata())
+        subschema = pyarrow.schema(list(result.schema)[1:])
+        utils.assert_field_type_name(driver, "query", query, subschema)
 
     def test_append(
         self,
