@@ -243,3 +243,17 @@ class TestStatement:
                 # Some databases have no way to do DROP IF EXISTS
                 if not driver.is_table_not_found(table_name=table_name, error=e):
                     raise
+
+    def test_nonascii_queries(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+    ) -> None:
+        text = "Hello, 世界 🚀"
+        query = f"SELECT '{text}' AS greeting"
+        query = driver.query_override("TestStatement.test_nonascii_queries", query)
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(query)
+            handle, _ = cursor.adbc_statement.execute_query()
+            result = pyarrow.RecordBatchReader._import_from_c(handle.address).read_all()
+        assert result[0][0].as_py() == text
