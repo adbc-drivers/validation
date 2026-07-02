@@ -442,7 +442,7 @@ def render(
     output_directory: Path,
 ) -> None:
     # do not sort; use the given order
-    vendor_sort = {
+    vendor_sort: dict[str, tuple[int, str]] = {
         vendor: (idx, friendly) for idx, (vendor, friendly) in enumerate(vendor_mapping)
     }
     print(vendor_sort)
@@ -763,8 +763,11 @@ def render(
     )
 
     features = []
+    _raw_vendor_names: list[str] = raw_features.columns[3:]
     # list of (index, ord, vendor_name)
-    vendors = [(i,) + vendor_sort[v] for i, v in enumerate(raw_features.columns[3:])]
+    vendors: list[tuple[int, int, str]] = [
+        (i, *vendor_sort[v]) for (i, v) in enumerate(_raw_vendor_names)
+    ]
     vendors.sort(key=lambda v: v[1])
     for row in raw_features.fetchall():
         group = row[0]
@@ -801,14 +804,13 @@ def render(
             }
         )
 
-    vendors = [v[2] for v in vendors]
     # TODO: restore support for driver-specific features (we don't really use
     # this right now)
     features = render_part(
         env.get_template("features.md"),
         {
             "features": features,
-            "vendors": vendors,
+            "vendors": [v[2] for v in vendors],
         },
     )
 
