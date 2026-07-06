@@ -245,14 +245,15 @@ class ValidationReport:
         passed = test_case["test_results"].count("passed")
 
         partial_support = False
-        for raw_meta in test_case["tags"]:
+        for raw_meta in test_case["metadata"]:
             meta = json.loads(raw_meta)
-            partial_support = partial_support or meta.get("partial-support", False)
-            caveats.extend(meta.get("caveats", []))
+            tags = meta.get("tags", {})
+            partial_support = partial_support or tags.get("partial-support", False)
+            caveats.extend(tags.get("caveats", []))
 
-            if caveat := meta.get("broken-driver"):
+            if caveat := tags.get("broken-driver"):
                 caveats.append(caveat)
-            if caveat := meta.get("broken-vendor"):
+            if caveat := tags.get("broken-vendor"):
                 caveats.append(caveat)
 
         result = "passed"
@@ -262,13 +263,17 @@ class ValidationReport:
             partial_support or passed < len(test_case["test_results"]) or extra_caveats
         ):
             result = "partial"
-            for query_name, test_result in zip(
-                test_case["query_names"], test_case["test_results"]
+            for i, (query_name, test_result) in enumerate(
+                zip(test_case["query_names"], test_case["test_results"])
             ):
                 if test_result == "passed":
                     continue
-                query_kind = query_name.split("/")[1]
-                caveats.append(f"{query_kind} is not supported for {rhs}")
+                elif test_result == "skipped":
+                    if skip_reason := json.loads(test_case["metadata"][i]).get("skip"):
+                        caveats.append(skip_reason)
+                else:
+                    query_kind = query_name.split("/")[1]
+                    caveats.append(f"{query_kind} is not supported for {rhs}")
 
         caveats.extend(extra_caveats or [])
 
@@ -355,10 +360,10 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
         query_name = properties.get("query")
         if query_name is None:
             query = None
-            tags = {}
+            metadata = {}
         else:
             query = query_set.queries[query_name]
-            tags = query.metadata().tags.model_dump(by_alias=True)
+            metadata = query.metadata().model_dump(by_alias=True)
 
         if failure is not None or error is not None:
             test_result = "failed"
@@ -384,8 +389,8 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
                 "vendor_version": version,
                 "query_name": query_name,
                 "arrow_type_name": arrow_type,
-                "tags": json.dumps(tags),
                 "properties": json.dumps(properties),
+                "metadata": json.dumps(metadata),
             }
         )
 
@@ -399,8 +404,8 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
             pyarrow.field("query_name", pyarrow.string()),
             pyarrow.field("arrow_type_name", pyarrow.string()),
             # Actually JSON
-            pyarrow.field("tags", pyarrow.string()),
             pyarrow.field("properties", pyarrow.string()),
+            pyarrow.field("metadata", pyarrow.string()),
         ]
     )
     duckdb.register(
@@ -416,8 +421,8 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
               vendor_version STRING,
               query_name STRING,
               arrow_type_name STRING,
-              tags JSON,
               properties JSON,
+              metadata JSON,
         );
         INSERT INTO testcases
         SELECT
@@ -428,8 +433,8 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
           vendor_version,
           query_name,
           arrow_type_name,
-          CAST(tags AS JSON) AS tags,
           CAST(properties AS JSON) AS properties,
+          CAST(metadata AS JSON) AS properties,
         FROM testcases_raw
         """
     )
@@ -943,16 +948,16 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
         SELECT
           vendor,
           vendor_version,
-          tags->>'sql-type-name' AS sql_type,
+          metadata->>'tags'->>'sql-type-name' AS sql_type,
           ARRAY_AGG(test_result ORDER BY query_name ASC) AS test_results,
           ARRAY_AGG(query_name ORDER BY query_name ASC) AS query_names,
-          ARRAY_AGG(tags ORDER BY query_name ASC) as tags,
+          ARRAY_AGG(metadata ORDER BY query_name ASC) as metadata,
         WHERE
           test_name = 'test_query'
           AND query_name NOT LIKE 'type/bind/%'
-          AND (tags->>'sql-type-name') IS NOT NULL
-        GROUP BY vendor, vendor_version, tags->>'sql-type-name'
-        ORDER BY vendor, vendor_version, tags->>'sql-type-name'
+          AND (metadata->>'tags'->>'sql-type-name') IS NOT NULL
+        GROUP BY vendor, vendor_version, metadata->>'tags'->>'sql-type-name'
+        ORDER BY vendor, vendor_version, metadata->>'tags'->>'sql-type-name'
         """)
         .arrow()
         .read_all()
@@ -1007,16 +1012,16 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
           vendor,
           vendor_version,
           arrow_type_name,
-          tags->>'sql-type-name' AS sql_type,
+          metadata->>'tags'->>'sql-type-name' AS sql_type,
           ARRAY_AGG(test_result ORDER BY query_name ASC) AS test_results,
           ARRAY_AGG(query_name ORDER BY query_name ASC) AS query_names,
-          ARRAY_AGG(tags ORDER BY query_name ASC) as tags,
+          ARRAY_AGG(metadata ORDER BY query_name ASC) as metadata,
         WHERE
           test_name = 'test_query'
           AND query_name LIKE 'type/bind/%'
-          AND (tags->>'sql-type-name') IS NOT NULL
-        GROUP BY vendor, vendor_version, arrow_type_name, tags->>'sql-type-name'
-        ORDER BY vendor, vendor_version, arrow_type_name, tags->>'sql-type-name'
+          AND (metadata->>'tags'->>'sql-type-name') IS NOT NULL
+        GROUP BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'sql-type-name'
+        ORDER BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'sql-type-name'
         """)
         .arrow()
         .read_all()
@@ -1048,15 +1053,16 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
           vendor,
           vendor_version,
           arrow_type_name,
-          tags->>'sql-type-name' AS sql_type,
-          test_result,
-          query_name,
-          tags
+          ARRAY_AGG(metadata->>'tags'->>'sql-type-name' ORDER BY query_name ASC) AS sql_types,
+          ARRAY_AGG(test_result ORDER BY query_name ASC) AS test_results,
+          ARRAY_AGG(query_name ORDER BY query_name ASC) as query_names,
+          ARRAY_AGG(metadata ORDER BY query_name ASC) as metadata,
         WHERE
           test_module LIKE '%TestIngest'
           AND test_name = 'test_create'
-          AND (tags->>'sql-type-name') IS NOT NULL
-        ORDER BY vendor, vendor_version, query_name
+          AND (metadata->>'tags'->>'sql-type-name') IS NOT NULL
+        GROUP BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'variant'
+        ORDER BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'variant'
         """)
         .arrow()
         .read_all()
@@ -1066,20 +1072,20 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
         query_set = get_quirks(
             test_case["vendor_version"], vendor=test_case["vendor"]
         ).query_set
-        query_name = test_case["query_name"]
+        arrow_type_names = set()
+        for query_name in test_case["query_names"]:
+            arrow_type_names.add(query_set.queries[query_name].arrow_type_name)
         arrow_type = html.escape(test_case["arrow_type_name"])
-        sql_type = html.escape(test_case["sql_type"])
+        sql_types = {html.escape(sql_type) for sql_type in test_case["sql_types"]}
+        sql_type = ", ".join(sorted(sql_types))
+
         report.add_table_entry(
             test_case["vendor"],
             test_case["vendor_version"],
             "ingest",
             arrow_type,
             sql_type,
-            {
-                "test_results": [test_case["test_result"]],
-                "query_names": [test_case["query_name"]],
-                "tags": [test_case["tags"]],
-            },
+            test_case,
             variant=query_set.queries[query_name].metadata().tags.variant,
         )
 

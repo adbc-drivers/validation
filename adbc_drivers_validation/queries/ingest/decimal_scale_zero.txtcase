@@ -28,7 +28,7 @@ sql-type-name = "NUMERIC"
         },
         {
             "name": "value",
-            "format": "d:10,2",
+            "format": "d:10,0",
             "flags": ["nullable"]
         }
     ]
@@ -37,10 +37,18 @@ sql-type-name = "NUMERIC"
 // part: input
 
 {"idx": 0, "value": null}
-{"idx": 1, "value": "0.00"}
-{"idx": 2, "value": "123.45"}
-{"idx": 3, "value": "-123.45"}
-{"idx": 4, "value": "9999999.99"}
-{"idx": 5, "value": "-9999999.99"}
-{"idx": 6, "value": "99999999.99"}
-{"idx": 7, "value": "-99999999.99"}
+{"idx": 1, "value": "0"}
+{"idx": 2, "value": "12345"}
+{"idx": 3, "value": "-12345"}
+{"idx": 4, "value": "999999999"}
+{"idx": 5, "value": "-999999999"}
+{"idx": 6, "value": "1"}
+{"idx": 7, "value": "10"}
+{"idx": 8, "value": "100"}
+{"idx": 9, "value": "1000"}
+{"idx": 10, "value": "10000"}
+{"idx": 11, "value": "100000"}
+{"idx": 12, "value": "1000000"}
+{"idx": 13, "value": "10000000"}
+{"idx": 14, "value": "100000000"}
+{"idx": 15, "value": "1000000000"}
