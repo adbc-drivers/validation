@@ -32,7 +32,6 @@ from adbc_drivers_validation.utils import (
     execute_query_without_prepare,
     scoped_trace,
     setup_connection,
-    setup_statement,
 )
 
 
@@ -154,7 +153,7 @@ class TestQuery:
                     cursor.adbc_statement.execute_update()
 
             with conn.cursor() as cursor:
-                with setup_statement(query, cursor):
+                with driver.setup_statement(query, cursor):
                     with scoped_trace(f"query: {sql}"):
                         result = execute_query_without_prepare(cursor, sql)
 
@@ -175,7 +174,7 @@ class TestQuery:
 
         with setup_connection(query, conn):
             with conn.cursor() as cursor:
-                with setup_statement(query, cursor):
+                with driver.setup_statement(query, cursor):
                     schema = cursor.adbc_execute_schema(sql)
 
         compare.compare_schemas(expected_schema, schema)

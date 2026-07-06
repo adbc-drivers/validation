@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import abc
+import contextlib
 import dataclasses
 import functools
 import itertools
@@ -231,6 +232,17 @@ class DriverQuirks(abc.ABC):
     def query_override(self, context: str, default: str) -> str:
         """Override ad-hoc queries in tests without parameterized queries."""
         return default
+
+    @contextlib.contextmanager
+    def setup_statement(
+        self, query: "Query" | str, cursor: adbc_driver_manager.dbapi.Cursor
+    ) -> contextlib.AbstractContextManager[None]:
+        """Set up a statement for a query."""
+        if isinstance(query, Query):
+            with utils.setup_statement(query, cursor):
+                yield
+        else:
+            yield
 
     def bind_parameter(self, index: int) -> str:
         """

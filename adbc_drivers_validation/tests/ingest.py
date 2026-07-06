@@ -30,10 +30,7 @@ import pytest
 
 from adbc_drivers_validation import compare, model, utils
 from adbc_drivers_validation.model import Query
-from adbc_drivers_validation.utils import (
-    execute_query_without_prepare,
-    setup_statement,
-)
+from adbc_drivers_validation.utils import execute_query_without_prepare
 
 
 def generate_tests(
@@ -111,8 +108,10 @@ def generate_tests(
 _SANITIZE_TABLE_NAME = re.compile(r"[^a-zA-Z0-9_]")
 
 
-def make_table_name(prefix: str, query: Query) -> str:
+def make_table_name(prefix: str, query: Query | str) -> str:
     # Try to avoid table based rate limits by using a unique table per case.
+    if isinstance(query, str):
+        return _SANITIZE_TABLE_NAME.sub("_", f"{prefix}_{query}")
     suffix = query.name.rsplit("/", 1)[-1]
     return _SANITIZE_TABLE_NAME.sub("_", f"{prefix}_{suffix}")
 
@@ -133,7 +132,7 @@ class TestIngest:
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
 
-            with setup_statement(query, cursor):
+            with driver.setup_statement(query, cursor):
                 modified = cursor.adbc_ingest(table_name, data, mode="create")
                 if driver.features.statement_rows_affected:
                     assert modified == len(data)
@@ -145,7 +144,7 @@ class TestIngest:
             fields.append(driver.quote_identifier(field.name))
         select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
         with conn.cursor() as cursor:
-            with setup_statement(query, cursor):
+            with driver.setup_statement(query, cursor):
                 result = execute_query_without_prepare(cursor, select)
 
         # TODO: we should also inspect the type name and make sure it matches the
@@ -176,17 +175,18 @@ class TestIngest:
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-            modified = cursor.adbc_ingest(table_name, data, mode="create")
-            if driver.features.statement_rows_affected:
-                assert modified == len(data)
-            else:
-                assert modified == -1
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, data, mode="create")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data)
+                else:
+                    assert modified == -1
 
-            modified = cursor.adbc_ingest(table_name, data2, mode="append")
-            if driver.features.statement_rows_affected:
-                assert modified == len(data2)
-            else:
-                assert modified == -1
+                modified = cursor.adbc_ingest(table_name, data2, mode="append")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data2)
+                else:
+                    assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -248,17 +248,18 @@ class TestIngest:
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-            modified = cursor.adbc_ingest(table_name, data, mode="create_append")
-            if driver.features.statement_rows_affected:
-                assert modified == len(data)
-            else:
-                assert modified == -1
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, data, mode="create_append")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data)
+                else:
+                    assert modified == -1
 
-            modified = cursor.adbc_ingest(table_name, data2, mode="create_append")
-            if driver.features.statement_rows_affected:
-                assert modified == len(data2)
-            else:
-                assert modified == -1
+                modified = cursor.adbc_ingest(table_name, data2, mode="create_append")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data2)
+                else:
+                    assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -297,21 +298,26 @@ class TestIngest:
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-            cursor.adbc_ingest(table_name, data, mode="replace")
-            modified = cursor.adbc_ingest(table_name, data, mode="replace")
-            if driver.features.statement_rows_affected:
-                assert modified == len(data)
-            else:
-                assert modified == -1
+            with driver.setup_statement(query, cursor):
+                cursor.adbc_ingest(table_name, data, mode="replace")
+                modified = cursor.adbc_ingest(table_name, data, mode="replace")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data)
+                else:
+                    assert modified == -1
 
-            if driver.name == "bigquery":
-                # BigQuery rate-limits metadata operations
-                time.sleep(5)
-            modified = cursor.adbc_ingest(table_name, data2, mode="replace")
-            if driver.features.statement_rows_affected:
-                assert modified == len(data2)
-            else:
-                assert modified == -1
+        if driver.name == "bigquery":
+            # BigQuery rate-limits metadata operations
+            time.sleep(5)
+
+        with conn.cursor() as cursor:
+            driver.try_drop_table(cursor, table_name=table_name)
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, data2, mode="replace")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data2)
+                else:
+                    assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -336,11 +342,12 @@ class TestIngest:
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-            modified = cursor.adbc_ingest(table_name, data, mode="replace")
-            if driver.features.statement_rows_affected:
-                assert modified == len(data)
-            else:
-                assert modified == -1
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, data, mode="replace")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data)
+                else:
+                    assert modified == -1
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -595,34 +602,39 @@ class TestIngest:
         with conn.cursor() as cursor:
             # Create table in default schema
             driver.try_drop_table(cursor, table_name=table_name)
-            cursor.adbc_ingest(table_name, default_data, mode="create")
+            with driver.setup_statement(query, cursor):
+                cursor.adbc_ingest(table_name, default_data, mode="create")
 
+        with conn.cursor() as cursor:
             # Create and replace table in secondary schema
             driver.try_drop_table(
                 cursor, table_name=table_name, schema_name=schema_name
             )
-            cursor.adbc_ingest(
-                table_name,
-                data,
-                mode="replace",
-                db_schema_name=schema_name,
-            )
+            with driver.setup_statement(query, cursor):
+                cursor.adbc_ingest(
+                    table_name,
+                    data,
+                    mode="replace",
+                    db_schema_name=schema_name,
+                )
 
-            if driver.name == "bigquery":
-                # BigQuery rate-limits metadata operations
-                time.sleep(5)
+        if driver.name == "bigquery":
+            # BigQuery rate-limits metadata operations
+            time.sleep(5)
 
+        with conn.cursor() as cursor:
             # Replace again with smaller dataset in secondary schema
-            modified = cursor.adbc_ingest(
-                table_name,
-                data2,
-                mode="replace",
-                db_schema_name=schema_name,
-            )
-            if driver.features.statement_rows_affected:
-                assert modified == len(data2)
-            else:
-                assert modified == -1
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(
+                    table_name,
+                    data2,
+                    mode="replace",
+                    db_schema_name=schema_name,
+                )
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data2)
+                else:
+                    assert modified == -1
 
         # Verify secondary schema table has the replaced data
         with conn.cursor() as cursor:
@@ -742,7 +754,8 @@ class TestIngest:
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
 
-            modified = cursor.adbc_ingest(table_name, reader, mode="create")
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, reader, mode="create")
             # We expect num_batches * len(data) rows
             if driver.features.statement_rows_affected:
                 assert modified == num_batches * len(data)
@@ -805,7 +818,8 @@ class TestIngest:
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
 
-            modified = cursor.adbc_ingest(table_name, large_data, mode="create")
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, large_data, mode="create")
             if driver.features.statement_rows_affected:
                 assert modified == num_repeats * len(data)
             else:
@@ -855,12 +869,14 @@ class TestIngest:
         )
 
         with conn.cursor() as cursor:
-            modified = cursor.adbc_ingest(table_name, data, mode="replace")
+            with driver.setup_statement("TestIngest.test_many_columns", cursor):
+                modified = cursor.adbc_ingest(table_name, data, mode="replace")
             if driver.features.statement_rows_affected:
                 assert modified == num_rows
             else:
                 assert modified == -1
 
+            # TODO(lidavidm): also ensure all columns made it through
             count = driver.query_override(
                 "TestIngest.test_many_columns",
                 f"SELECT COUNT(*) FROM {driver.quote_identifier(table_name)}",
@@ -915,7 +931,8 @@ class TestIngest:
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-            modified = cursor.adbc_ingest(table_name, data, mode="create")
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, data, mode="create")
             if driver.features.statement_rows_affected:
                 assert modified == len(data)
             else:
