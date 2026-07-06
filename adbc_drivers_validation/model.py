@@ -235,8 +235,8 @@ class DriverQuirks(abc.ABC):
 
     @contextlib.contextmanager
     def setup_statement(
-        self, query: "Query" | str, cursor: adbc_driver_manager.dbapi.Cursor
-    ) -> contextlib.AbstractContextManager[None]:
+        self, query: "Query | str", cursor: adbc_driver_manager.dbapi.Cursor
+    ) -> typing.Generator[None, None, None]:
         """Set up a statement for a query."""
         if isinstance(query, Query):
             with utils.setup_statement(query, cursor):
