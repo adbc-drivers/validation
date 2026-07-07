@@ -585,6 +585,8 @@ class TestConnection:
         assert list(sorted(set(columns))) == list(sorted(columns))
         assert (*table_id, "ints") in columns
         assert (*table_id, "strs") in columns
+        synthetic = driver.features.bulk_ingest_synthetic_column
+        columns = [c for c in columns if c[-1] != synthetic]
         assert len(columns) == 2
 
     def test_get_objects_column_filter_catalog(
@@ -679,6 +681,8 @@ class TestConnection:
             for column in table["table_columns"]
         ]
         assert list(sorted(set(columns))) == list(sorted(columns))
+        synthetic = driver.features.bulk_ingest_synthetic_column
+        columns = [c for c in columns if c[-1] != synthetic]
         assert columns == [(*table_id, "ints"), (*table_id, "strs")]
 
     def test_get_objects_column_xdbc(

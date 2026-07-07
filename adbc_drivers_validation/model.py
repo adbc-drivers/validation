@@ -137,6 +137,9 @@ class DriverFeatures(BaseModel):
     _secondary_catalog: str | FromEnv | None = PrivateAttr(default=None)
     _secondary_catalog_schema: str | FromEnv | None = PrivateAttr(default=None)
     supported_xdbc_fields: list[str] = Field(default_factory=list)
+    # Some databases requires a primary key, so bulk ingestion needs to
+    # add a synthetic column for that.
+    bulk_ingest_synthetic_column: str | None = Field(default=None)
     # Some databases support temporary tables, but they exist in the same
     # namespace as regular tables, so we need to change how we test them.
     quirk_bulk_ingest_temporary_shares_namespace: bool = Field(default=False)
