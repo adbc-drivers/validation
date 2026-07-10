@@ -283,6 +283,58 @@ class TestIngest:
             query.metadata(),
         )
 
+    def test_create_conflict(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> None:
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        table_name = make_table_name("test_ingest_create_conflict", query)
+        data = subquery.input()
+
+        with conn.cursor() as cursor:
+            driver.try_drop_table(cursor, table_name=table_name)
+            with driver.setup_statement(query, cursor):
+                cursor.adbc_ingest(table_name, data, mode="create")
+
+                with pytest.raises(adbc_driver_manager.dbapi.Error) as excinfo:
+                    cursor.adbc_ingest(table_name, data, mode="create")
+
+        assert (
+            excinfo.value.status_code
+            == adbc_driver_manager.AdbcStatusCode.ALREADY_EXISTS
+        )
+
+    def test_createappend_schema_mismatch(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> None:
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        table_name = make_table_name("test_ingest_createappend_mismatch", query)
+        data = subquery.input()
+        extra = pyarrow.array([0] * len(data), type=pyarrow.int64())
+        mismatched = data.append_column("adbc_extra_column", extra)
+
+        with conn.cursor() as cursor:
+            driver.try_drop_table(cursor, table_name=table_name)
+            with driver.setup_statement(query, cursor):
+                cursor.adbc_ingest(table_name, data, mode="create_append")
+
+                with pytest.raises(adbc_driver_manager.dbapi.Error) as excinfo:
+                    cursor.adbc_ingest(table_name, mismatched, mode="create_append")
+
+        assert (
+            excinfo.value.status_code
+            == adbc_driver_manager.AdbcStatusCode.ALREADY_EXISTS
+        )
+
     def test_replace(
         self,
         driver: model.DriverQuirks,
