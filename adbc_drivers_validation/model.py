@@ -90,14 +90,17 @@ class FromEnv(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     env: str = Field(description="Environment variable to read the value from")
+    template: str | None = Field(default=None, description="Format the value")
 
-    def __init__(self, env: str) -> None:
-        super().__init__(env=env)
+    def __init__(self, env: str, *, template: str | None = None) -> None:
+        super().__init__(env=env, template=template)
 
     def get_or_raise(self) -> str:
         value = os.environ.get(self.env)
         if value is None:
             raise ValueError(f"Must set {self.env}")
+        if self.template:
+            value = self.template.format(value)
         return value
 
 
