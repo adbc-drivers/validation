@@ -115,7 +115,7 @@ def db_kwargs(
         if isinstance(v, model.FromEnv):
             if v.env not in os.environ:
                 pytest.skip(f"Must set {v.env}")
-            db_kwargs[k] = os.environ[v.env]
+            db_kwargs[k] = v.get_or_raise()
         else:
             db_kwargs[k] = v
     return db_kwargs
@@ -136,7 +136,7 @@ def conn_factory(
         if isinstance(v, model.FromEnv):
             if v.env not in os.environ:
                 pytest.skip(f"Must set {v.env}")
-            stmt_kwargs[k] = os.environ[v.env]
+            stmt_kwargs[k] = v.get_or_raise()
         else:
             stmt_kwargs[k] = v
 
