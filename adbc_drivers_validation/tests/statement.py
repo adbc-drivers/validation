@@ -121,6 +121,38 @@ class TestStatement:
             result = pyarrow.RecordBatchReader._import_from_c(handle.address).read_all()
         assert result[0].to_pylist() == [2, 3, 4, 5]
 
+    @pytest.mark.requires_features(["statement_bind"])
+    def test_parameter_null_typed(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        sample_table: str,
+    ) -> None:
+        id_ = driver.quote_identifier("id")
+        value = driver.quote_identifier("value")
+        parameters = pyarrow.RecordBatch.from_pydict(
+            {
+                "0": pyarrow.array([7001], type=pyarrow.int64()),
+                "1": pyarrow.nulls(1),
+            }
+        )
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(
+                f"INSERT INTO {sample_table} ({id_}, {value}) "
+                f"VALUES ({driver.bind_parameter(1)}, {driver.bind_parameter(2)})"
+            )
+            cursor.adbc_statement.prepare()
+            cursor.adbc_statement.bind(parameters)
+            cursor.adbc_statement.execute_update()
+
+        with conn.cursor() as cursor:
+            cursor.adbc_statement.set_sql_query(
+                f"SELECT {value} FROM {sample_table} WHERE {id_} = 7001"
+            )
+            handle, _ = cursor.adbc_statement.execute_query()
+            result = pyarrow.RecordBatchReader._import_from_c(handle.address).read_all()
+        assert result[0].to_pylist() == [None]
+
     def test_parameter_schema(
         self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
     ) -> None:
