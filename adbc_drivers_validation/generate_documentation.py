@@ -829,10 +829,8 @@ def render(
     )
 
     # Assemble the version header/warnings/etc
-    is_prerelease = (
-        not report.driver_version.startswith("v")
-        or report.driver_version.endswith("-dirty")
-        or "dev" in report.driver_version
+    is_prerelease = report.driver_version.endswith("-dirty") or any(
+        x in report.driver_version for x in ("-dev", "-alpha", "-beta", "-rc", "-pre")
     )
 
     if is_prerelease:
