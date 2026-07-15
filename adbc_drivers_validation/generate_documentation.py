@@ -861,10 +861,13 @@ def render(
         )
 
     compatibility_info = "This driver was tested on:\n"
-    for version in sorted(report.versions, key=lambda v: (v.vendor, v.version)):
+    # Sort and deduplicate by the rendered string not by dev-facing identifier
+    compat_versions = set()
+    for version in report.versions:
         vendor_name = report.versions[version].quirks.vendor_name
         full_version = report.versions[version].vendor_version
-        compatibility_info += f"\n- {vendor_name} `{full_version}`"
+        compat_versions.add(f"\n- {vendor_name} `{full_version}`")
+    compatibility_info += "\n".join(sorted(compat_versions))
 
     if is_prerelease:
         heading += (

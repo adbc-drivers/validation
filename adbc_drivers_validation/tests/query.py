@@ -154,8 +154,7 @@ class TestQuery:
 
             with conn.cursor() as cursor:
                 with driver.setup_statement(query, cursor):
-                    with scoped_trace(f"query: {sql}"):
-                        result = execute_query_without_prepare(cursor, sql)
+                    result = execute_query_without_prepare(cursor, sql)
 
         compare.compare_tables(expected_result, result, query.metadata())
         utils.assert_field_type_name(driver, "query", query, result.schema)
