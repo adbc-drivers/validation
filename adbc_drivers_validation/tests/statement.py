@@ -121,7 +121,7 @@ class TestStatement:
             result = pyarrow.RecordBatchReader._import_from_c(handle.address).read_all()
         assert result[0].to_pylist() == [2, 3, 4, 5]
 
-    @pytest.mark.requires_features(["statement_bind"])
+    @pytest.mark.requires_features(["statement_bind", "statement_prepare"])
     def test_parameter_null_typed(
         self,
         driver: model.DriverQuirks,
