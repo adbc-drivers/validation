@@ -552,6 +552,7 @@ def render(
         if type_table.features.statement_bind:
             for entry in type_table.type_bind:
                 columns[version.vendor]["Bind"][entry.lhs].add(entry)
+
         for entry in type_table.type_ingest:
             column = "Ingest"
             if entry.variant:
@@ -562,6 +563,23 @@ def render(
     column_order = {
         vendor: list(sorted(columns[vendor].keys())) for vendor in vendor_order
     }
+
+    # Try to size the columns equally. We want each vendor column to be sized
+    # equally and split the vendor column in half if necessary (I think it's
+    # unlikely that one version will support bind parameters but not the
+    # other, but we should account for it).
+    total_subcols = 2 + 2 * len(vendor_order)
+    subcol_width = 100 / total_subcols
+    # First column is the type name
+    type_bind_ingest_column_widths = [2 * subcol_width]
+    for vendor in vendor_order:
+        if len(column_order[vendor]) == 1:
+            type_bind_ingest_column_widths.append(2 * subcol_width)
+        else:
+            assert len(column_order[vendor]) == 2
+            type_bind_ingest_column_widths.append(subcol_width)
+            type_bind_ingest_column_widths.append(subcol_width)
+
     row_order = []
     if columns:
         row_order = list(
@@ -595,6 +613,7 @@ def render(
     template_vars["type_bind_ingest"] = type_bind_ingest
     template_vars["type_bind_ingest_columns"] = column_order
     template_vars["type_bind_ingest_vendors"] = vendor_order
+    template_vars["type_bind_ingest_column_widths"] = type_bind_ingest_column_widths
     template_vars["vendor_friendly_name"] = {
         vendor: vendor_sort[vendor][1] for vendor in vendor_order
     }

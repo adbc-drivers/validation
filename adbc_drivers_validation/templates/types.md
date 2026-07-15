@@ -20,6 +20,12 @@
 #### Database to Arrow
 
 <table class="docutils data align-default" style="width: 100%;">
+<colgroup>
+<col span="1" style="width: {{ 100 / (len(type_select_columns) + 1) }}%;">
+{% for col in type_select_columns %}
+<col span="1" style="width: {{ 100 / (len(type_select_columns) + 1) }}%;">
+{% endfor %}
+</colgroup>
 <thead>
 <tr>
 <th style="text-align: left; vertical-align: middle;">Database Type</th>
@@ -60,6 +66,11 @@
 #### Arrow to Database
 
 <table class="docutils data align-default" style="width: 100%;">
+<colgroup>
+{% for col_width in type_bind_ingest_column_widths %}
+<col span="1" style="width: {{ col_width }}%;">
+{% endfor %}
+</colgroup>
 <thead>
 <tr>
 <th rowspan="3" style="text-align: left; vertical-align: middle;">Arrow Type</th>
