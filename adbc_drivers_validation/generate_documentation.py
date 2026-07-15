@@ -80,7 +80,7 @@ class CustomFeatures:
 @dataclasses.dataclass(frozen=True)
 class TypeTableEntry:
     lhs: str
-    rhs: str
+    rhs: tuple[str, ...]
     result: typing.Literal["passed", "partial", "failed"]
     footnotes: tuple[str, ...] = dataclasses.field(default_factory=tuple)
     # e.g. for BigQuery, we may have both "ingest (default)" and "ingest (with
@@ -88,7 +88,7 @@ class TypeTableEntry:
     variant: str | None = None
 
     def render_rhs(self) -> str:
-        rhs = self.rhs
+        rhs = ", ".join(self.rhs)
         if self.result == "failed":
             rhs = "❌"
         elif self.result == "partial":
@@ -96,6 +96,39 @@ class TypeTableEntry:
         for footnote in self.footnotes:
             rhs += footnote
         return rhs
+
+    def merge(self, other: "TypeTableEntry") -> "TypeTableEntry":
+        if self.lhs != other.lhs:
+            raise ValueError(f"Cannot merge lhs {self.lhs} and {other.lhs}")
+        if self.variant != other.variant:
+            raise ValueError(f"Cannot merge variant {self.variant} and {other.variant}")
+
+        # failed + failed = failed
+        # failed + (other) = partial
+        # partial + (anything) or (anything) + partial = partial
+        # passed + passed = passed
+        rhs = tuple(sorted(set(self.rhs) | set(other.rhs)))
+        if self.result == "failed" and other.result == "failed":
+            result = "failed"
+        elif self.result == "failed":
+            result = "partial"
+            # we don't want the failed side to contribute to the RHS
+            rhs = other.rhs
+        elif other.result == "failed":
+            result = "partial"
+            rhs = self.rhs
+        elif self.result == "partial" or other.result == "partial":
+            result = "partial"
+        else:
+            result = "passed"
+
+        return TypeTableEntry(
+            lhs=self.lhs,
+            rhs=rhs,
+            result=result,
+            footnotes=tuple(sorted(set(self.footnotes) | set(other.footnotes))),
+            variant=self.variant,
+        )
 
 
 @dataclasses.dataclass
@@ -235,7 +268,7 @@ class ValidationReport:
         vendor_version: str,
         category: typing.Literal["select", "bind", "ingest"],
         lhs: str,
-        rhs: str,
+        rhs: str | list[str],
         test_case: dict[str, typing.Any],
         *,
         extra_caveats: list[str] | None = None,
@@ -273,7 +306,7 @@ class ValidationReport:
                         caveats.append(skip_reason)
                 else:
                     query_kind = query_name.split("/")[1]
-                    caveats.append(f"{query_kind} is not supported for {rhs}")
+                    caveats.append(f"{query_kind} is not supported")
 
         caveats.extend(extra_caveats or [])
 
@@ -288,7 +321,7 @@ class ValidationReport:
         getattr(version, f"type_{category}").append(
             TypeTableEntry(
                 lhs=lhs,
-                rhs=rhs,
+                rhs=tuple(rhs) if isinstance(rhs, list) else (rhs,),
                 result=result,
                 footnotes=footnotes,
                 variant=variant,
@@ -489,11 +522,8 @@ def render(
         for c in column_order:
             entries = columns[c].get(k)
             if entries:
-                # TODO: more sophisticated merging? Or break out columns for
-                # different (major) versions; or simply hope that we can treat
-                # different major versions as different "vendors" which will
-                # break out a column for them
-                all_cells.append(", ".join(entry.render_rhs() for entry in entries))
+                entry = functools.reduce(lambda a, b: a.merge(b), entries)
+                all_cells.append(entry.render_rhs())
             else:
                 all_cells.append("(NA/not tested)")
 
@@ -549,8 +579,8 @@ def render(
             for c in column_order[v]:
                 entries = columns[v][c].get(k)
                 if entries:
-                    # TODO: more sophisticated merging?
-                    all_cells.append(", ".join(entry.render_rhs() for entry in entries))
+                    entry = functools.reduce(lambda a, b: a.merge(b), entries)
+                    all_cells.append(entry.render_rhs())
                 else:
                     all_cells.append("(NA/not tested)")
 
@@ -997,21 +1027,19 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
             )
         extra_caveats = []
         if len(arrow_type_names) != 1:
-            arrow_type = ", ".join(sorted(arrow_type_names))
             extra_caveats.append(
                 "Return type is inconsistent depending on how the query was written"
             )
-        else:
-            arrow_type = next(iter(arrow_type_names))
-
-        arrow_type = html.escape(arrow_type)
+        arrow_types = [
+            html.escape(arrow_type) for arrow_type in sorted(arrow_type_names)
+        ]
         sql_type = html.escape(test_case["sql_type"])
         report.add_table_entry(
             test_case["vendor"],
             test_case["vendor_version"],
             "select",
             sql_type,
-            arrow_type,
+            arrow_types,
             test_case,
             extra_caveats=extra_caveats,
         )
