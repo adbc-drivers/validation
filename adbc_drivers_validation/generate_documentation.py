@@ -519,8 +519,9 @@ def render(
     )
 
     for version, type_table in report.versions.items():
-        for entry in type_table.type_bind:
-            columns[version.vendor]["Bind"][entry.lhs].add(entry)
+        if type_table.features.statement_bind:
+            for entry in type_table.type_bind:
+                columns[version.vendor]["Bind"][entry.lhs].add(entry)
         for entry in type_table.type_ingest:
             column = "Ingest"
             if entry.variant:
@@ -576,6 +577,16 @@ def render(
 
     rows = []
     for version, type_table in report.versions.items():
+        rows.append(
+            {
+                "vendor": version.vendor,
+                "version": version.version,
+                "feature": "Bind Parameters",
+                "subfeature": None,
+                "suborder": None,
+                "supported": type_table.features.statement_bind,
+            }
+        )
         rows.append(
             {
                 "vendor": version.vendor,
