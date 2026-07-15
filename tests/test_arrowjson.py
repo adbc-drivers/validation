@@ -162,6 +162,30 @@ def test_from_dict_list() -> None:
     assert field.type.value_type == pyarrow.float32()
 
 
+def test_from_dict_dictionary() -> None:
+    field = arrowjson.field_from_dict(
+        {
+            "name": "res",
+            "format": "i",
+            "flags": ["nullable"],
+            "dictionary": {"format": "u"},
+        }
+    )
+
+    assert field.name == "res"
+    assert field.type == pyarrow.dictionary(pyarrow.int32(), pyarrow.string())
+    assert field.nullable
+
+
+def test_array_from_values_dictionary() -> None:
+    field = pyarrow.field(
+        "res", pyarrow.dictionary(pyarrow.int32(), pyarrow.string()), nullable=True
+    )
+    actual = arrowjson.array_from_values(["apple", "banana", "apple", None], field)
+    assert actual.type == field.type
+    assert actual.to_pylist() == ["apple", "banana", "apple", None]
+
+
 def test_load_table_extra_fields() -> None:
     schema = pyarrow.schema([pyarrow.field("a", pyarrow.int32())])
     data = [{"a": 1, "b": 2}]

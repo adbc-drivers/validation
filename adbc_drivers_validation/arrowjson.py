@@ -170,6 +170,13 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             values, pyarrow.field(field.name, storage_type, field.nullable)
         )
         return field.type.wrap_array(arr)
+    elif pyarrow.types.is_dictionary(field.type):
+        # Values are written plain in JSON; build the plain array first so
+        # that value-type-specific handling (e.g. base64 binary) applies
+        arr = array_from_values(
+            values, pyarrow.field(field.name, field.type.value_type, field.nullable)
+        )
+        return arr.cast(field.type)
     elif isinstance(field.type, pyarrow.ListType):
         # We have to synthesize it manually because of extension types
         offsets = [0]
@@ -258,7 +265,10 @@ def field_from_dict(source: dict) -> pyarrow.Field:
     ----------
     source : dict
         Dictionary containing field specification.
-        Must have a 'format' key, may have 'name', 'flags', and 'children' keys.
+        Must have a 'format' key, may have 'name', 'flags', 'children', and
+        'dictionary' keys.  As in the Arrow C data interface, a
+        dictionary-encoded field has the index type as its 'format' and the
+        value type in 'dictionary'.
 
     Returns
     -------
@@ -277,6 +287,12 @@ def field_from_dict(source: dict) -> pyarrow.Field:
         child_fields = [field_from_dict(child) for child in children]
 
     data_type = parse_type_format(type_format, child_fields)
+    if dictionary := source.get("dictionary", None):
+        data_type = pyarrow.dictionary(
+            data_type,
+            field_from_dict(dictionary).type,
+            ordered="dictionary_ordered" in flags,
+        )
     nullable = "nullable" in flags
 
     # Note that we treat extension types as regular types with metadata and
