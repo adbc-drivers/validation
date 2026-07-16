@@ -36,7 +36,7 @@
 </thead>
 <tbody>
 {% for row in type_select %}
-<tr>
+<tr{% if len(row) > 2 %} class="row-with-cell-borders"{% endif %}>
 {% for span, cell in row %}
 {% if loop.index == 1 %}
 <td style="text-align: left;">
@@ -88,7 +88,7 @@
 </thead>
 <tbody>
 {% for row in type_bind_ingest %}
-<tr>
+<tr{% if len(row) > 2 %} class="row-with-cell-borders"{% endif %}>
 {% for span, cell in row %}
 {% if loop.index == 1 %}
 <td style="text-align: left;">
