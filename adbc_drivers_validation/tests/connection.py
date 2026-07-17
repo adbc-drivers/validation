@@ -773,7 +773,8 @@ class TestConnection:
             with conn.cursor() as cursor:
                 driver.try_drop_table(cursor, table_name=table_name)
 
-                cursor.adbc_ingest(table_name, data)
+                with driver.setup_statement("TestConnection.get_objects_table", cursor):
+                    cursor.adbc_ingest(table_name, data)
 
             yield table_id
 
@@ -1205,14 +1206,17 @@ class TestConnection:
         )
         q = f"CREATE TABLE {quoted_table} (spam INT, eggs VARCHAR)"
         q = driver.query_override("TestConnection.test_get_table_schema_catalog", q)
-        with conn.cursor() as cursor:
+        with conn.cursor() as cursor, scoped_trace(q):
             driver.try_drop_table(
                 cursor,
                 table_name="test_get_table_schema_catalog",
                 catalog_name=driver.features.secondary_catalog,
                 schema_name=driver.features.secondary_catalog_schema,
             )
-            cursor.execute(q)
+            with driver.setup_statement(
+                "TestConnection.test_get_table_schema_catalog", cursor
+            ):
+                cursor.execute(q)
 
         schema = conn.adbc_get_table_schema(
             "test_get_table_schema_catalog",
@@ -1236,7 +1240,10 @@ class TestConnection:
                 table_name="test_get_table_schema_schema",
                 schema_name=driver.features.secondary_schema,
             )
-            cursor.execute(q)
+            with driver.setup_statement(
+                "TestConnection.test_get_table_schema_schema", cursor
+            ):
+                cursor.execute(q)
 
         schema = conn.adbc_get_table_schema(
             "test_get_table_schema_schema",
