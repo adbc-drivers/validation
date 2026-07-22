@@ -36,7 +36,12 @@ from adbc_drivers_validation.utils import (
 
 
 def generate_tests(
-    all_quirks: list[model.DriverQuirks], metafunc: pytest.Metafunc
+    all_quirks: list[model.DriverQuirks],
+    metafunc: pytest.Metafunc,
+    *,
+    # Only value types that drivers widely support dictionary-encoded; pandas
+    # categoricals of strings produce dictionary<values=large_string>.
+    bind_dictionary_queries: set[str] = {"type/bind/string", "type/bind/large_string"},
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
     if utils.generate_tests_by_marks(all_quirks, metafunc):
@@ -74,6 +79,14 @@ def generate_tests(
                     marks.append(pytest.mark.skip(reason="not implemented"))
             elif metafunc.definition.name == "test_query":
                 if not isinstance(query.query, model.SelectQuery):
+                    continue
+            elif metafunc.definition.name == "test_query_bind_dictionary":
+                if not isinstance(query.query, model.SelectQuery):
+                    continue
+                if query.query.bind_query(quirks) is None:
+                    continue
+                if query.name not in bind_dictionary_queries:
+                    # There's no need to test every type with every encoding
                     continue
 
             combinations.append(
@@ -158,6 +171,52 @@ class TestQuery:
 
         compare.compare_tables(expected_result, result, query.metadata())
         utils.assert_field_type_name(driver, "query", query, result.schema)
+
+    def test_query_bind_dictionary(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+        query_setup: None,
+    ) -> None:
+        """Bind the parameters of an existing case, dictionary-encoded.
+
+        Dictionary encoding is an encoding of the same logical values, not a
+        different logical type (Arrow columnar format, Dictionary-encoded
+        Layout), so a driver that binds a plain column should accept the
+        dictionary-encoded equivalent, decoding it if the database has no
+        native counterpart.  Hence the case's expected result is reused as-is.
+
+        https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout
+        """
+        subquery = query.query
+        assert isinstance(subquery, model.SelectQuery)
+
+        bind = subquery.bind_query(driver)
+        assert bind is not None
+
+        plain = subquery.bind_data().combine_chunks()
+        encoded = pyarrow.table(
+            [column.dictionary_encode() for column in plain.columns],
+            names=plain.schema.names,
+        )
+
+        with setup_connection(query, conn):
+            # test_query has already bound the plain parameters into the table
+            # that query_setup created, so start over from a clean one.
+            _setup_query(driver, conn, query)
+
+            with conn.cursor() as cursor:
+                cursor.adbc_statement.set_sql_query(bind)
+                cursor.adbc_statement.bind(encoded.to_batches()[0])
+                cursor.adbc_statement.execute_update()
+
+            with conn.cursor() as cursor:
+                with driver.setup_statement(query, cursor):
+                    with scoped_trace(f"query: {subquery.query()}"):
+                        result = execute_query_without_prepare(cursor, subquery.query())
+
+        compare.compare_tables(subquery.expected_result(), result, query.metadata())
 
     def test_execute_schema(
         self,
