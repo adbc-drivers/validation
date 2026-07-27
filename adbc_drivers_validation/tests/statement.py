@@ -59,7 +59,11 @@ def generate_tests(
             metafunc.definition.name == "test_prepare"
             and not quirks.features.statement_prepare
         ):
-            marks.append(pytest.mark.skip("prepare not supported"))
+            marks.append(
+                pytest.mark.xfail(
+                    raises=adbc_driver_manager.dbapi.NotSupportedError, strict=True
+                )
+            )
 
         combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
 
