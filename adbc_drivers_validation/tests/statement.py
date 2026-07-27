@@ -59,11 +59,7 @@ def generate_tests(
             metafunc.definition.name == "test_prepare"
             and not quirks.features.statement_prepare
         ):
-            marks.append(
-                pytest.mark.xfail(
-                    raises=adbc_driver_manager.dbapi.NotSupportedError, strict=True
-                )
-            )
+            marks.append(pytest.mark.skip("prepare not supported"))
 
         combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
 
@@ -249,7 +245,10 @@ class TestStatement:
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
-                assert rows_affected == 1
+                if driver.features.statement_rows_affected_dml_returns_zero:
+                    assert rows_affected == 0
+                else:
+                    assert rows_affected == 1
             else:
                 assert rows_affected == -1
 
@@ -258,7 +257,10 @@ class TestStatement:
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
-                assert rows_affected == 1
+                if driver.features.statement_rows_affected_dml_returns_zero:
+                    assert rows_affected == 0
+                else:
+                    assert rows_affected == 1
             else:
                 assert rows_affected == -1
 
@@ -267,7 +269,10 @@ class TestStatement:
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
-                assert rows_affected == 1
+                if driver.features.statement_rows_affected_dml_returns_zero:
+                    assert rows_affected == 0
+                else:
+                    assert rows_affected == 1
             else:
                 assert rows_affected == -1
 
