@@ -134,7 +134,7 @@ class DriverFeatures(BaseModel):
     statement_prepare: bool = Field(default=False)
     statement_rows_affected: bool = Field(default=False)
     # Some backends report zero for every ordinary DML statement (ex: Databend)
-    statement_rows_affected_dml_returns_zero: bool = Field(default=False)
+    quirk_statement_rows_affected_dml_returns_zero: bool = Field(default=False)
     statement_rows_affected_ddl: bool = Field(default=False)
     _current_catalog: str | FromEnv | None = PrivateAttr(default=None)
     _current_schema: str | FromEnv | None = PrivateAttr(default=None)
