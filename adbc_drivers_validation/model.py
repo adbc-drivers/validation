@@ -133,8 +133,6 @@ class DriverFeatures(BaseModel):
     statement_get_parameter_schema: bool = Field(default=False)
     statement_prepare: bool = Field(default=False)
     statement_rows_affected: bool = Field(default=False)
-    # Some backends report zero for every ordinary DML statement (ex: Databend)
-    quirk_statement_rows_affected_dml_returns_zero: bool = Field(default=False)
     statement_rows_affected_ddl: bool = Field(default=False)
     _current_catalog: str | FromEnv | None = PrivateAttr(default=None)
     _current_schema: str | FromEnv | None = PrivateAttr(default=None)
@@ -153,6 +151,8 @@ class DriverFeatures(BaseModel):
     quirk_get_objects_constraints_foreign_normalized: bool = Field(default=False)
     quirk_get_objects_constraints_primary_normalized: bool = Field(default=False)
     quirk_get_objects_constraints_unique_normalized: bool = Field(default=False)
+    # Some backends report zero for every ordinary DML statement (ex: Databend)
+    quirk_statement_rows_affected_dml_returns_zero: bool = Field(default=False)
 
     def __init__(self, **data: typing.Any) -> None:
         super().__init__(**data)
