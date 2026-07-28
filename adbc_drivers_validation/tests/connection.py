@@ -103,7 +103,7 @@ def generate_tests(
         elif not f.get_objects and metafunc.definition.name.startswith(
             "test_get_objects_"
         ):
-            marks.append(pytest.mark.xfail(reason="not implemented"))
+            marks.append(pytest.mark.skip(reason="not implemented"))
 
         combinations.append(pytest.param(driver_param, id=driver_param, marks=marks))
     metafunc.parametrize(
