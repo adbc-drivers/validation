@@ -245,7 +245,10 @@ class TestStatement:
                 assert rows_affected == -1
 
             cursor.adbc_statement.set_sql_query(
-                f"INSERT INTO {quoted_name} (id) VALUES (1)"
+                driver.query_override(
+                    "TestStatement.test_rows_affected.insert",
+                    f"INSERT INTO {quoted_name} (id) VALUES (1)",
+                )
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
@@ -254,7 +257,10 @@ class TestStatement:
                 assert rows_affected == -1
 
             cursor.adbc_statement.set_sql_query(
-                f"UPDATE {quoted_name} SET id = id + 1 WHERE id = 1"
+                driver.query_override(
+                    "TestStatement.test_rows_affected.update",
+                    f"UPDATE {quoted_name} SET id = id + 1 WHERE id = 1",
+                )
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
@@ -263,7 +269,10 @@ class TestStatement:
                 assert rows_affected == -1
 
             cursor.adbc_statement.set_sql_query(
-                f"DELETE FROM {quoted_name} WHERE id = 2"
+                driver.query_override(
+                    "TestStatement.test_rows_affected.delete",
+                    f"DELETE FROM {quoted_name} WHERE id = 2",
+                )
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:

@@ -116,6 +116,14 @@ def make_table_name(prefix: str, query: Query | str) -> str:
     return _SANITIZE_TABLE_NAME.sub("_", f"{prefix}_{suffix}")
 
 
+def _sort_table_by_first_column(table: pyarrow.Table) -> pyarrow.Table:
+    # Sort locally because some vendors, such as Cassandra, do not support
+    # ORDER BY here.
+    if table.num_rows <= 1 or len(table.schema) == 0:
+        return table
+    return table.sort_by([(table.schema[0].name, "ascending")])
+
+
 class TestIngest:
     def test_create(
         self,
@@ -142,14 +150,17 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        select = (
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        )
         with conn.cursor() as cursor:
             with driver.setup_statement(query, cursor):
                 result = execute_query_without_prepare(cursor, select)
 
         # TODO: we should also inspect the type name and make sure it matches the
         # metadata
-        expected = subquery.expected()
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(subquery.expected())
         compare.compare_tables(expected, result, query.metadata())
         subschema = pyarrow.schema(list(result.schema)[1:])
         utils.assert_field_type_name(driver, "query", query, subschema)
@@ -190,7 +201,7 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -202,8 +213,12 @@ class TestIngest:
             },
             schema=expected.schema,
         )
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(
+            pyarrow.concat_tables([expected, expected2])
+        )
         compare.compare_tables(
-            pyarrow.concat_tables([expected, expected2]),
+            expected,
             result,
             query.metadata(),
         )
@@ -263,7 +278,7 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -277,8 +292,12 @@ class TestIngest:
             },
             schema=expected.schema,
         )
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(
+            pyarrow.concat_tables([expected, expected2])
+        )
         compare.compare_tables(
-            pyarrow.concat_tables([expected, expected2]),
+            expected,
             result,
             query.metadata(),
         )
@@ -373,7 +392,8 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        # The final replacement contains one row, so ordering is unnecessary.
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -403,11 +423,12 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
-        expected = subquery.expected()
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(subquery.expected())
         compare.compare_tables(expected, result, query.metadata())
 
     def test_not_null(
@@ -818,7 +839,9 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        select = (
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -837,8 +860,10 @@ class TestIngest:
             )
             expected_tables.append(expected_i)
 
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(pyarrow.concat_tables(expected_tables))
         compare.compare_tables(
-            pyarrow.concat_tables(expected_tables),
+            expected,
             result,
             query.metadata(),
         )
@@ -881,7 +906,9 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        select = (
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -900,8 +927,10 @@ class TestIngest:
             )
             expected_tables.append(expected_i)
 
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(pyarrow.concat_tables(expected_tables))
         compare.compare_tables(
-            pyarrow.concat_tables(expected_tables),
+            expected,
             result,
             query.metadata(),
         )
@@ -979,7 +1008,9 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        select = (
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        )
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
@@ -992,4 +1023,6 @@ class TestIngest:
 
             result = execute_query_without_prepare(cursor, select)
 
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(expected)
         compare.compare_tables(expected, result, query.metadata())
