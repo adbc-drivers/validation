@@ -252,7 +252,10 @@ class TestStatement:
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
-                assert rows_affected == 1
+                if driver.features.quirk_statement_rows_affected_dml_returns_zero:
+                    assert rows_affected == 0
+                else:
+                    assert rows_affected == 1
             else:
                 assert rows_affected == -1
 
@@ -264,7 +267,10 @@ class TestStatement:
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
-                assert rows_affected == 1
+                if driver.features.quirk_statement_rows_affected_dml_returns_zero:
+                    assert rows_affected == 0
+                else:
+                    assert rows_affected == 1
             else:
                 assert rows_affected == -1
 
@@ -276,7 +282,10 @@ class TestStatement:
             )
             rows_affected = cursor.adbc_statement.execute_update()
             if driver.features.statement_rows_affected:
-                assert rows_affected == 1
+                if driver.features.quirk_statement_rows_affected_dml_returns_zero:
+                    assert rows_affected == 0
+                else:
+                    assert rows_affected == 1
             else:
                 assert rows_affected == -1
 

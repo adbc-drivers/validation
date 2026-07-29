@@ -151,6 +151,8 @@ class DriverFeatures(BaseModel):
     quirk_get_objects_constraints_foreign_normalized: bool = Field(default=False)
     quirk_get_objects_constraints_primary_normalized: bool = Field(default=False)
     quirk_get_objects_constraints_unique_normalized: bool = Field(default=False)
+    # Some backends report zero for every ordinary DML statement (ex: Databend)
+    quirk_statement_rows_affected_dml_returns_zero: bool = Field(default=False)
 
     def __init__(self, **data: typing.Any) -> None:
         super().__init__(**data)
