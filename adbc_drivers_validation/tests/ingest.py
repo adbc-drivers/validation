@@ -38,6 +38,7 @@ def generate_tests(
     metafunc: pytest.Metafunc,
     *,
     ingest_mode_queries: set[str] = {"ingest/string"},
+    long_value_queries: set[str] = {"ingest/string", "ingest/binary"},
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
     if utils.generate_tests_by_marks(all_quirks, metafunc):
@@ -84,7 +85,10 @@ def generate_tests(
             if not quirks.features.statement_bulk_ingest:
                 marks.append(pytest.mark.skip(reason="not implemented"))
 
-            if (
+            if metafunc.definition.name == "test_create_long_values":
+                if query.name not in long_value_queries:
+                    continue
+            elif (
                 metafunc.definition.name != "test_create"
                 and query.name not in ingest_mode_queries
             ):
@@ -106,6 +110,24 @@ def generate_tests(
 
 
 _SANITIZE_TABLE_NAME = re.compile(r"[^a-zA-Z0-9_]")
+_LONG_VALUE_SIZES = tuple(1 << exponent for exponent in range(10, 18))
+_LONG_STRING_PATTERN = "0123456789abcdef"
+_LONG_BINARY_PATTERN = bytes(range(256))
+
+
+def _make_long_values(value_type: pyarrow.DataType) -> list[str] | list[bytes]:
+    """Create deterministic string or binary values from 1 to 128 KiB."""
+    if pyarrow.types.is_string(value_type):
+        return [
+            (_LONG_STRING_PATTERN * ((size // len(_LONG_STRING_PATTERN)) + 1))[:size]
+            for size in _LONG_VALUE_SIZES
+        ]
+    elif pyarrow.types.is_binary(value_type):
+        return [
+            (_LONG_BINARY_PATTERN * ((size // len(_LONG_BINARY_PATTERN)) + 1))[:size]
+            for size in _LONG_VALUE_SIZES
+        ]
+    raise TypeError(f"Expected string or binary type, got {value_type}")
 
 
 def make_table_name(prefix: str, query: Query | str) -> str:
@@ -905,6 +927,52 @@ class TestIngest:
             result,
             query.metadata(),
         )
+
+    def test_create_long_values(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> None:
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        table_name = make_table_name("test_ingest_long_values", query)
+        input_schema = subquery.input_schema()
+        expected_schema = subquery.expected_schema()
+        values = _make_long_values(input_schema[1].type)
+
+        data = pyarrow.Table.from_pydict(
+            {
+                input_schema[0].name: range(len(values)),
+                input_schema[1].name: values,
+            },
+            schema=input_schema,
+        )
+        expected = pyarrow.Table.from_pydict(
+            {
+                expected_schema[0].name: range(len(values)),
+                expected_schema[1].name: values,
+            },
+            schema=expected_schema,
+        )
+
+        with conn.cursor() as cursor:
+            driver.try_drop_table(cursor, table_name=table_name)
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, data, mode="create")
+            if driver.features.statement_rows_affected:
+                assert modified == len(data)
+            else:
+                assert modified == -1
+
+        fields = [driver.quote_identifier(field.name) for field in data.schema]
+        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        with conn.cursor() as cursor:
+            with driver.setup_statement(query, cursor):
+                result = execute_query_without_prepare(cursor, select)
+
+        compare.compare_tables(expected, result, query.metadata())
 
     def test_many_columns(
         self,
