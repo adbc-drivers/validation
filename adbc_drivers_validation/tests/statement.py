@@ -146,9 +146,11 @@ class TestStatement:
             cursor.adbc_statement.execute_update()
 
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(
-                f"SELECT {value} FROM {sample_table} WHERE {id_} = 7001"
+            query = driver.query_override(
+                "TestStatement.test_parameter_null_typed",
+                f"SELECT {value} FROM {sample_table} WHERE {id_} = 7001",
             )
+            cursor.adbc_statement.set_sql_query(query)
             handle, _ = cursor.adbc_statement.execute_query()
             result = pyarrow.RecordBatchReader._import_from_c(handle.address).read_all()
         assert result[0].to_pylist() == [None]
