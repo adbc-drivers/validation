@@ -959,7 +959,12 @@ class TestIngest:
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-            with driver.setup_statement(query, cursor):
+            with (
+                driver.setup_statement(query, cursor),
+                driver.setup_statement(
+                    "TestIngest.test_create_long_values.ingest", cursor
+                ),
+            ):
                 modified = cursor.adbc_ingest(table_name, data, mode="create")
             if driver.features.statement_rows_affected:
                 assert modified == len(data)
@@ -969,7 +974,12 @@ class TestIngest:
         fields = [driver.quote_identifier(field.name) for field in data.schema]
         select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
         with conn.cursor() as cursor:
-            with driver.setup_statement(query, cursor):
+            with (
+                driver.setup_statement(query, cursor),
+                driver.setup_statement(
+                    "TestIngest.test_create_long_values.select", cursor
+                ),
+            ):
                 result = execute_query_without_prepare(cursor, select)
 
         compare.compare_tables(expected, result, query.metadata())
