@@ -1001,7 +1001,9 @@ class TestIngest:
                 assert modified == -1
 
         fields = [driver.quote_identifier(field.name) for field in data.schema]
-        select = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
+        select = (
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        )
         with conn.cursor() as cursor:
             with (
                 driver.setup_statement(query, cursor),
@@ -1011,6 +1013,8 @@ class TestIngest:
             ):
                 result = execute_query_without_prepare(cursor, select)
 
+        result = _sort_table_by_first_column(result)
+        expected = _sort_table_by_first_column(expected)
         compare.compare_tables(expected, result, query.metadata())
 
     def test_many_columns(
