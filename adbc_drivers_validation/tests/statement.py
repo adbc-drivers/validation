@@ -100,7 +100,11 @@ class TestStatement:
     ) -> None:
         # Regression test for https://github.com/adbc-drivers/mssql/issues/7
         with conn.cursor() as cursor:
-            schema = cursor.adbc_execute_schema(f"SELECT id + 1 FROM {sample_table}")
+            query = f"SELECT id + 1 FROM {sample_table}"
+            query = driver.query_override(
+                "TestStatement.test_execute_schema_noalias", query
+            )
+            schema = cursor.adbc_execute_schema(query)
         assert len(schema) == 1
 
     def test_parameter_execute(
