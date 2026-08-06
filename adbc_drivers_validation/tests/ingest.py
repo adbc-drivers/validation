@@ -110,22 +110,24 @@ def generate_tests(
 
 
 _SANITIZE_TABLE_NAME = re.compile(r"[^a-zA-Z0-9_]")
-_LONG_VALUE_SIZES = tuple(1 << exponent for exponent in range(10, 18))
+_LONG_VALUE_SIZES = (1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072)
 _LONG_STRING_PATTERN = "0123456789abcdef"
 _LONG_BINARY_PATTERN = bytes(range(256))
 
 
-def _make_long_values(value_type: pyarrow.DataType) -> list[str] | list[bytes]:
+def _make_long_values(
+    value_type: pyarrow.DataType, *, sizes: typing.Sequence[int] = _LONG_VALUE_SIZES
+) -> list[str] | list[bytes]:
     """Create deterministic string or binary values from 1 to 128 KiB."""
     if pyarrow.types.is_string(value_type):
         return [
             (_LONG_STRING_PATTERN * ((size // len(_LONG_STRING_PATTERN)) + 1))[:size]
-            for size in _LONG_VALUE_SIZES
+            for size in sizes
         ]
     elif pyarrow.types.is_binary(value_type):
         return [
             (_LONG_BINARY_PATTERN * ((size // len(_LONG_BINARY_PATTERN)) + 1))[:size]
-            for size in _LONG_VALUE_SIZES
+            for size in sizes
         ]
     raise TypeError(f"Expected string or binary type, got {value_type}")
 
@@ -147,6 +149,35 @@ def _sort_table_by_first_column(table: pyarrow.Table) -> pyarrow.Table:
 
 
 class TestIngest:
+    @pytest.fixture(scope="class")
+    @classmethod
+    def long_values(
+        cls,
+        query: Query,
+    ) -> tuple[Query, pyarrow.Table, pyarrow.Table]:
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        input_schema = subquery.input_schema()
+        expected_schema = subquery.expected_schema()
+        values = _make_long_values(input_schema[1].type)
+
+        data = pyarrow.Table.from_pydict(
+            {
+                input_schema[0].name: range(len(values)),
+                input_schema[1].name: values,
+            },
+            schema=input_schema,
+        )
+        expected = pyarrow.Table.from_pydict(
+            {
+                expected_schema[0].name: range(len(values)),
+                expected_schema[1].name: values,
+            },
+            schema=expected_schema,
+        )
+        return query, data, expected
+
     def test_create(
         self,
         driver: model.DriverQuirks,
@@ -961,30 +992,10 @@ class TestIngest:
         self,
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
-        query: Query,
+        long_values: tuple[Query, pyarrow.Table, pyarrow.Table],
     ) -> None:
-        subquery = query.query
-        assert isinstance(subquery, model.IngestQuery)
-
+        query, data, expected = long_values
         table_name = make_table_name("test_ingest_long_values", query)
-        input_schema = subquery.input_schema()
-        expected_schema = subquery.expected_schema()
-        values = _make_long_values(input_schema[1].type)
-
-        data = pyarrow.Table.from_pydict(
-            {
-                input_schema[0].name: range(len(values)),
-                input_schema[1].name: values,
-            },
-            schema=input_schema,
-        )
-        expected = pyarrow.Table.from_pydict(
-            {
-                expected_schema[0].name: range(len(values)),
-                expected_schema[1].name: values,
-            },
-            schema=expected_schema,
-        )
 
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
