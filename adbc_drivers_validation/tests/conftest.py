@@ -83,7 +83,12 @@ def pytest_collection_modifyitems(
         name = item.name
         query_name = ""
         variant = ""
-        if hasattr(item, "callspec") and "query" in item.callspec.params:  # type: ignore[ty:unresolved-attribute]
+        if (
+            hasattr(item, "callspec")
+            and "query" in item.callspec.params  # type: ignore[ty:unresolved-attribute]
+            and "query_setup" in item.fixturenames  # type: ignore[ty:unresolved-attribute]
+        ):
+            # group query_setup tests by query, so they can reuse the same state
             query: model.Query = item.callspec.params["query"]  # type: ignore[ty:unresolved-attribute]
             query_name = query.name
             variant = query.metadata().tags.variant or ""

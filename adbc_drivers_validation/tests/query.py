@@ -177,17 +177,12 @@ class TestQuery:
         driver: model.DriverQuirks,
         conn: adbc_driver_manager.dbapi.Connection,
         query: Query,
-        query_setup: None,
     ) -> None:
-        """Bind the parameters of an existing case, dictionary-encoded.
+        """
+        Bind the parameters of an existing case, dictionary-encoded.
 
-        Dictionary encoding is an encoding of the same logical values, not a
-        different logical type (Arrow columnar format, Dictionary-encoded
-        Layout), so a driver that binds a plain column should accept the
-        dictionary-encoded equivalent, decoding it if the database has no
-        native counterpart.  Hence the case's expected result is reused as-is.
-
-        https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout
+        A driver that binds a plain column should accept the
+        dictionary-encoded equivalent.
         """
         subquery = query.query
         assert isinstance(subquery, model.SelectQuery)
@@ -204,7 +199,19 @@ class TestQuery:
         with setup_connection(query, conn):
             # test_query has already bound the plain parameters into the table
             # that query_setup created, so start over from a clean one.
-            _setup_query(driver, conn, query)
+            for attempt in range(10):
+                try:
+                    _setup_query(driver, conn, query)
+                except adbc_driver_manager.Error as e:
+                    if driver.is_retryable(e):
+                        delay = min(60, 2 ** (attempt + 2))
+                        print("backing off and trying again after", delay, "seconds")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        raise
+                else:
+                    break
 
             with conn.cursor() as cursor:
                 cursor.adbc_statement.set_sql_query(bind)
