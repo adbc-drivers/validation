@@ -121,7 +121,7 @@ class TestQuery:
                 with setup_connection(query, conn):
                     _setup_query(driver, conn, query)
             except adbc_driver_manager.Error as e:
-                if driver.is_retryable(e):
+                if attempt < 9 and driver.is_retryable(e):
                     delay = min(60, 2 ** (attempt + 2))
                     print("backing off and trying again after", delay, "seconds")
                     time.sleep(delay)
@@ -203,7 +203,7 @@ class TestQuery:
                 try:
                     _setup_query(driver, conn, query)
                 except adbc_driver_manager.Error as e:
-                    if driver.is_retryable(e):
+                    if attempt < 9 and driver.is_retryable(e):
                         delay = min(60, 2 ** (attempt + 2))
                         print("backing off and trying again after", delay, "seconds")
                         time.sleep(delay)
