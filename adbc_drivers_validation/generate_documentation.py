@@ -568,17 +568,28 @@ def render(
     # equally and split the vendor column in half if necessary (I think it's
     # unlikely that one version will support bind parameters but not the
     # other, but we should account for it).
-    total_subcols = 2 + 2 * len(vendor_order)
-    subcol_width = 100 / total_subcols
-    # First column is the type name
-    type_bind_ingest_column_widths = [2 * subcol_width]
-    for vendor in vendor_order:
-        if len(column_order[vendor]) == 1:
-            type_bind_ingest_column_widths.append(2 * subcol_width)
-        else:
-            assert len(column_order[vendor]) == 2
-            type_bind_ingest_column_widths.append(subcol_width)
-            type_bind_ingest_column_widths.append(subcol_width)
+
+    # Unlikely: there are > 4 vendors
+    if len(vendor_order) > 4:
+        total_cols = 1 + len(vendor_order)
+        col_width = 100 / total_cols
+        # First column is the type name
+        type_bind_ingest_column_widths = [col_width]
+        for vendor in vendor_order:
+            for _ in range(len(column_order[vendor])):
+                type_bind_ingest_column_widths.append(
+                    col_width / len(column_order[vendor])
+                )
+    else:
+        # Always make the first column (the type name) smaller
+        total_cols = len(vendor_order)
+        col_width = 75 / total_cols
+        type_bind_ingest_column_widths = [25]
+        for vendor in vendor_order:
+            for _ in range(len(column_order[vendor])):
+                type_bind_ingest_column_widths.append(
+                    col_width / len(column_order[vendor])
+                )
 
     row_order = []
     if columns:
