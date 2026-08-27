@@ -103,6 +103,30 @@ def generate_tests(
     )
 
 
+def _uses_select_bind(driver: model.DriverQuirks, query: Query) -> bool:
+    return (
+        isinstance(query.query, model.SelectQuery)
+        and query.query.bind_query(driver) is not None
+        and driver.features.statement_bind_test_mode == "select"
+    )
+
+
+def _execute_bound_select(
+    cursor: adbc_driver_manager.dbapi.Cursor,
+    sql: str,
+    data: pyarrow.Table,
+) -> pyarrow.Table:
+    """Execute a parameterized SELECT once for each bound row."""
+    results = []
+    cursor.adbc_statement.set_sql_query(sql)
+    for batch in data.combine_chunks().to_batches(max_chunksize=1):
+        cursor.adbc_statement.bind(batch)
+        handle, _ = cursor.adbc_statement.execute_query()
+        with pyarrow.RecordBatchReader._import_from_c(handle.address) as reader:
+            results.append(reader.read_all())
+    return pyarrow.concat_tables(results)
+
+
 class TestQuery:
     """Tests that involve running queries."""
 
@@ -119,7 +143,10 @@ class TestQuery:
         for attempt in range(10):
             try:
                 with setup_connection(query, conn):
-                    _setup_query(driver, conn, query)
+                    if driver.features.select_fixture_setup and not _uses_select_bind(
+                        driver, query
+                    ):
+                        _setup_query(driver, conn, query)
             except adbc_driver_manager.Error as e:
                 if attempt < 9 and driver.is_retryable(e):
                     delay = min(60, 2 ** (attempt + 2))
@@ -154,20 +181,28 @@ class TestQuery:
 
         with setup_connection(query, conn):
             bind = subquery.bind_query(driver)
-            if bind:
-                # TODO: also test with stream
-                # TODO: also test with executequery, not executeupdate
-                # TODO: also test with multiple batches in stream
-                # TODO: also test with empty stream/empty batch
-                data = subquery.bind_data().combine_chunks().to_batches()[0]
+            if bind and driver.features.statement_bind_test_mode == "select":
                 with conn.cursor() as cursor:
-                    cursor.adbc_statement.set_sql_query(bind)
-                    cursor.adbc_statement.bind(data)
-                    cursor.adbc_statement.execute_update()
+                    with driver.setup_statement(query, cursor):
+                        result = _execute_bound_select(
+                            cursor,
+                            bind,
+                            subquery.bind_data(),
+                        )
+            else:
+                if bind:
+                    # TODO: also test with stream
+                    # TODO: also test with multiple batches in stream
+                    # TODO: also test with empty stream/empty batch
+                    data = subquery.bind_data().combine_chunks().to_batches()[0]
+                    with conn.cursor() as cursor:
+                        cursor.adbc_statement.set_sql_query(bind)
+                        cursor.adbc_statement.bind(data)
+                        cursor.adbc_statement.execute_update()
 
-            with conn.cursor() as cursor:
-                with driver.setup_statement(query, cursor):
-                    result = execute_query_without_prepare(cursor, sql)
+                with conn.cursor() as cursor:
+                    with driver.setup_statement(query, cursor):
+                        result = execute_query_without_prepare(cursor, sql)
 
         compare.compare_tables(expected_result, result, query.metadata())
         utils.assert_field_type_name(driver, "query", query, result.schema)
@@ -197,31 +232,41 @@ class TestQuery:
         )
 
         with setup_connection(query, conn):
-            # test_query has already bound the plain parameters into the table
-            # that query_setup created, so start over from a clean one.
-            for attempt in range(10):
-                try:
-                    _setup_query(driver, conn, query)
-                except adbc_driver_manager.Error as e:
-                    if attempt < 9 and driver.is_retryable(e):
-                        delay = min(60, 2 ** (attempt + 2))
-                        print("backing off and trying again after", delay, "seconds")
-                        time.sleep(delay)
-                        continue
+            if driver.features.statement_bind_test_mode == "select":
+                with conn.cursor() as cursor:
+                    with driver.setup_statement(query, cursor):
+                        result = _execute_bound_select(cursor, bind, encoded)
+            else:
+                # test_query has already bound the plain parameters into the table
+                # that query_setup created, so start over from a clean one.
+                for attempt in range(10):
+                    try:
+                        if driver.features.select_fixture_setup:
+                            _setup_query(driver, conn, query)
+                    except adbc_driver_manager.Error as e:
+                        if attempt < 9 and driver.is_retryable(e):
+                            delay = min(60, 2 ** (attempt + 2))
+                            print(
+                                "backing off and trying again after", delay, "seconds"
+                            )
+                            time.sleep(delay)
+                            continue
+                        else:
+                            raise
                     else:
-                        raise
-                else:
-                    break
+                        break
 
-            with conn.cursor() as cursor:
-                cursor.adbc_statement.set_sql_query(bind)
-                cursor.adbc_statement.bind(encoded.to_batches()[0])
-                cursor.adbc_statement.execute_update()
+                with conn.cursor() as cursor:
+                    cursor.adbc_statement.set_sql_query(bind)
+                    cursor.adbc_statement.bind(encoded.to_batches()[0])
+                    cursor.adbc_statement.execute_update()
 
-            with conn.cursor() as cursor:
-                with driver.setup_statement(query, cursor):
-                    with scoped_trace(f"query: {subquery.query()}"):
-                        result = execute_query_without_prepare(cursor, subquery.query())
+                with conn.cursor() as cursor:
+                    with driver.setup_statement(query, cursor):
+                        with scoped_trace(f"query: {subquery.query()}"):
+                            result = execute_query_without_prepare(
+                                cursor, subquery.query()
+                            )
 
         compare.compare_tables(subquery.expected_result(), result, query.metadata())
 

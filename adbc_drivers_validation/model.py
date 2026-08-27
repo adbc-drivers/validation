@@ -124,13 +124,18 @@ class DriverFeatures(BaseModel):
     get_objects_constraints_primary: bool = Field(default=False)
     get_objects_constraints_unique: bool = Field(default=False)
     metadata_type_name: bool = Field(default=False)
+    select_fixture_setup: bool = Field(default=True)
     statement_bind: bool = Field(default=False)
+    statement_bind_test_mode: typing.Literal["insert", "select"] = Field(
+        default="insert"
+    )
     statement_bulk_ingest: bool = Field(default=False)
     statement_bulk_ingest_catalog: bool = Field(default=False)
     statement_bulk_ingest_schema: bool = Field(default=False)
     statement_bulk_ingest_temporary: bool = Field(default=False)
     statement_execute_schema: bool = Field(default=False)
     statement_get_parameter_schema: bool = Field(default=False)
+    statement_unknown_option_passthrough: bool = Field(default=False)
     statement_prepare: bool = Field(default=False)
     statement_rows_affected: bool = Field(default=False)
     statement_rows_affected_ddl: bool = Field(default=False)
@@ -237,6 +242,13 @@ class DriverQuirks(abc.ABC):
     def query_override(self, context: str, default: str) -> str:
         """Override ad-hoc queries in tests without parameterized queries."""
         return default
+
+    @contextlib.contextmanager
+    def setup_validation(
+        self, database_options: typing.Mapping[str, typing.Any]
+    ) -> typing.Generator[None]:
+        """Set up resources needed for the validation suite."""
+        yield
 
     @contextlib.contextmanager
     def setup_statement(

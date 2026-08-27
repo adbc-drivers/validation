@@ -1259,10 +1259,13 @@ class TestConnection:
     ) -> None:
         # Regression test: ensure get(unknown) is NOT_FOUND, set(unknown) is NOT_IMPLEMENTED
         with conn.cursor() as cursor:
-            for handle in [
-                conn.adbc_database,
-                conn.adbc_connection,
-                cursor.adbc_statement,
+            for handle, check_unknown_setter in [
+                (conn.adbc_database, True),
+                (conn.adbc_connection, True),
+                (
+                    cursor.adbc_statement,
+                    not driver.features.statement_unknown_option_passthrough,
+                ),
             ]:
                 with subtests.test(name=handle.__class__.__name__):
                     for getter in (
@@ -1278,12 +1281,16 @@ class TestConnection:
                             == adbc_driver_manager.AdbcStatusCode.NOT_FOUND
                         )
 
-                    for v in [
-                        "value",
-                        4,
-                        4.0,
-                        b"value",
-                    ]:
+                    for v in (
+                        [
+                            "value",
+                            4,
+                            4.0,
+                            b"value",
+                        ]
+                        if check_unknown_setter
+                        else []
+                    ):
                         with pytest.raises(conn.NotSupportedError) as excinfo:
                             handle.set_options(
                                 **{
