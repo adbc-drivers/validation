@@ -132,7 +132,7 @@ def conn_factory(
     driver: model.DriverQuirks,
     driver_path: str,
     db_kwargs: dict[str, typing.Any],
-) -> typing.Generator[typing.Callable[[], adbc_driver_manager.dbapi.Connection]]:
+) -> typing.Callable[[], adbc_driver_manager.dbapi.Connection]:
     db_kwargs = db_kwargs.copy()
     conn_kwargs = {}
     stmt_kwargs = {}
@@ -164,8 +164,7 @@ def conn_factory(
         conn.cursor = _cursor  # type: ignore[ty:invalid-assignment]
         return conn
 
-    with driver.setup_validation(db_kwargs):
-        yield _factory
+    return _factory
 
 
 @pytest.fixture(scope="module")

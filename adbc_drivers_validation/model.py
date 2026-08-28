@@ -135,7 +135,6 @@ class DriverFeatures(BaseModel):
     statement_bulk_ingest_temporary: bool = Field(default=False)
     statement_execute_schema: bool = Field(default=False)
     statement_get_parameter_schema: bool = Field(default=False)
-    statement_unknown_option_passthrough: bool = Field(default=False)
     statement_prepare: bool = Field(default=False)
     statement_rows_affected: bool = Field(default=False)
     statement_rows_affected_ddl: bool = Field(default=False)
@@ -242,13 +241,6 @@ class DriverQuirks(abc.ABC):
     def query_override(self, context: str, default: str) -> str:
         """Override ad-hoc queries in tests without parameterized queries."""
         return default
-
-    @contextlib.contextmanager
-    def setup_validation(
-        self, database_options: typing.Mapping[str, typing.Any]
-    ) -> typing.Generator[None]:
-        """Set up resources needed for the validation suite."""
-        yield
 
     @contextlib.contextmanager
     def setup_statement(
