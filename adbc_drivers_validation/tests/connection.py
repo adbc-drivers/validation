@@ -478,6 +478,64 @@ class TestConnection:
         assert list(sorted(set(tables))) == list(sorted(tables))
         assert table_id in tables
 
+    @pytest.mark.requires_features(["get_objects", "get_objects_tabletypes_filter"])
+    def test_get_objects_tabletypes_filter(
+        self,
+        conn: adbc_driver_manager.dbapi.Connection,
+        get_objects_table: tuple[str | None, str | None, str],
+        get_objects_view: tuple[str | None, str | None, str],
+    ) -> None:
+        table_id = get_objects_table
+        view_id = get_objects_view
+
+        def matching_table_types(
+            object_id: tuple[str | None, str | None, str],
+            table_types_filter: list[str] | None = None,
+        ) -> list[str]:
+            catalog_name, db_schema_name, table_name = object_id
+            objects = (
+                conn.adbc_get_objects(
+                    depth="tables",
+                    catalog_filter=catalog_name,
+                    db_schema_filter=db_schema_name,
+                    table_name_filter=table_name,
+                    table_types_filter=table_types_filter,
+                )
+                .read_all()
+                .to_pylist()
+            )
+            return [
+                table["table_type"]
+                for catalog in objects
+                for schema in catalog["catalog_db_schemas"]
+                for table in schema["db_schema_tables"]
+                if (
+                    catalog["catalog_name"],
+                    schema["db_schema_name"],
+                    table["table_name"],
+                )
+                == object_id
+            ]
+
+        table_types = matching_table_types(table_id)
+        view_types = matching_table_types(view_id)
+        assert len(table_types) == 1
+        assert len(view_types) == 1
+        table_type = table_types[0]
+        view_type = view_types[0]
+        assert table_type != view_type, (
+            f"table and view reported the same table type: {table_type!r}"
+        )
+
+        assert matching_table_types(table_id, [view_type]) == []
+        assert matching_table_types(view_id, [table_type]) == []
+        assert matching_table_types(table_id, [table_type]) == [table_type]
+        assert matching_table_types(view_id, [view_type]) == [view_type]
+
+        table_and_view_types = [view_type, table_type]
+        assert matching_table_types(table_id, table_and_view_types) == [table_type]
+        assert matching_table_types(view_id, table_and_view_types) == [view_type]
+
     def test_get_objects_column_not_exist(
         self,
         conn: adbc_driver_manager.dbapi.Connection,
@@ -780,6 +838,40 @@ class TestConnection:
 
             with conn.cursor() as cursor:
                 driver.try_drop_table(cursor, table_name=table_name)
+
+    @pytest.fixture(scope="function")
+    @classmethod
+    def get_objects_view(
+        cls,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        get_objects_table: tuple[str | None, str | None, str],
+    ) -> typing.Generator[tuple[str | None, str | None, str], None, None]:
+        catalog_name, db_schema_name, table_name = get_objects_table
+        view_name = f"{table_name}view"
+        create_view = driver.query_override(
+            "TestConnection.get_objects_view.create_view",
+            f"CREATE VIEW {driver.quote_identifier(view_name)} AS "
+            f"SELECT * FROM {driver.quote_identifier(table_name)}",
+        )
+        drop_view = driver.query_override(
+            "TestConnection.get_objects_view.drop_view",
+            f"DROP VIEW {driver.quote_identifier(view_name)}",
+        )
+
+        with conn.cursor() as cursor, scoped_trace(create_view):
+            with driver.setup_statement(
+                "TestConnection.get_objects_view.create_view", cursor
+            ):
+                cursor.execute(create_view)
+
+        yield catalog_name, db_schema_name, view_name
+
+        with conn.cursor() as cursor, scoped_trace(drop_view):
+            with driver.setup_statement(
+                "TestConnection.get_objects_view.drop_view", cursor
+            ):
+                cursor.execute(drop_view)
 
     @pytest.fixture(scope="class")
     @classmethod
