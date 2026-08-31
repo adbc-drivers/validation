@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import time
 import typing
 import warnings
 
@@ -23,6 +24,26 @@ import pytest
 
 if typing.TYPE_CHECKING:
     from adbc_drivers_validation.model import DriverQuirks, Query
+
+
+def retry_adbc_operation[T](
+    operation: typing.Callable[[], T],
+    is_retryable: typing.Callable[[Exception], bool],
+) -> T:
+    """Retry an ADBC operation according to a driver's retry policy."""
+    attempts = 10
+    for attempt in range(attempts):
+        try:
+            return operation()
+        except adbc_driver_manager.Error as e:
+            if attempt == attempts - 1 or not is_retryable(e):
+                raise
+
+            delay = min(60, 2 ** (attempt + 2))
+            print("backing off and trying again after", delay, "seconds")
+            time.sleep(delay)
+
+    raise AssertionError("unreachable")
 
 
 def merge_into(target: dict[str, typing.Any], values: dict[str, typing.Any]) -> None:

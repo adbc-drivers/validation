@@ -223,24 +223,35 @@ class TestStatement:
     ) -> None:
         table_name = "test_rows_affected"
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(
-                driver.drop_table(table_name="test_rows_affected")
-            )
-            try:
-                cursor.adbc_statement.execute_update()
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+
+            def drop_table() -> None:
+                cursor.adbc_statement.set_sql_query(
+                    driver.drop_table(table_name=table_name)
+                )
+                try:
+                    cursor.adbc_statement.execute_update()
+                except adbc_driver_manager.Error as e:
+                    # Some databases have no way to do DROP IF EXISTS
+                    if not driver.is_table_not_found(table_name=table_name, error=e):
+                        raise
 
             quoted_name = driver.quote_identifier(table_name)
-            cursor.adbc_statement.set_sql_query(
-                driver.query_override(
-                    "TestStatement.test_rows_affected.create_table",
-                    f"CREATE TABLE {quoted_name} (id INT)",
+
+            def create_table() -> int:
+                # A retryable error may follow a CREATE that actually took
+                # effect, so drop the table again on every attempt.
+                drop_table()
+                cursor.adbc_statement.set_sql_query(
+                    driver.query_override(
+                        "TestStatement.test_rows_affected.create_table",
+                        f"CREATE TABLE {quoted_name} (id INT)",
+                    )
                 )
+                return cursor.adbc_statement.execute_update()
+
+            rows_affected = utils.retry_adbc_operation(
+                create_table, driver.is_retryable
             )
-            rows_affected = cursor.adbc_statement.execute_update()
 
             if (
                 driver.features.statement_rows_affected
@@ -295,15 +306,7 @@ class TestStatement:
             else:
                 assert rows_affected == -1
 
-            cursor.adbc_statement.set_sql_query(
-                driver.drop_table(table_name="test_rows_affected")
-            )
-            try:
-                cursor.adbc_statement.execute_update()
-            except adbc_driver_manager.Error as e:
-                # Some databases have no way to do DROP IF EXISTS
-                if not driver.is_table_not_found(table_name=table_name, error=e):
-                    raise
+            utils.retry_adbc_operation(drop_table, driver.is_retryable)
 
     def test_nonascii_queries(
         self,
