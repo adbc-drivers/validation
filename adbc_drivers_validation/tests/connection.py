@@ -1155,10 +1155,27 @@ class TestConnection:
         # Validate statistics structure if any are present
         all_stats = table_stats + [s for stats in column_stats.values() for s in stats]
 
-        for stat in all_stats:
-            # Verify statistic key is valid. Values in [0, 1024) are reserved for ADBC
-            assert 0 <= stat["statistic_key"] <= 1024, (
-                f"Invalid statistic key: {stat['statistic_key']} (must be 0-1024)"
+        # Values in [0, 1024) are reserved for ADBC. All other int16 values are
+        # implementation-specific and must be advertised by GetStatisticNames.
+        statistic_keys = (stat["statistic_key"] for stat in all_stats)
+        vendor_keys = {key for key in statistic_keys if not 0 <= key < 1024}
+        if vendor_keys:
+            names = conn.adbc_get_statistic_names().read_all()
+            assert names.schema.equals(
+                pyarrow.schema(
+                    [
+                        pyarrow.field(
+                            "statistic_name", pyarrow.string(), nullable=False
+                        ),
+                        pyarrow.field("statistic_key", pyarrow.int16(), nullable=False),
+                    ]
+                )
+            ), "GetStatisticNames returned schema does not match ADBC specification"
+            advertised_keys = set(names.column("statistic_key").to_pylist())
+            missing_keys = vendor_keys - advertised_keys
+            assert not missing_keys, (
+                "GetStatistics returned implementation-specific statistic key(s) not "
+                f"advertised by GetStatisticNames: {sorted(missing_keys)}"
             )
 
         # If row count statistic is present, verify it's reasonable since approx = true
