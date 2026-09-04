@@ -156,7 +156,7 @@ class DriverTypeTable:
         lines.append("Features")
         lines.append("~~~~~~~~")
 
-        for field in self.features.__fields__:
+        for field in self.features.model_fields:
             if field.startswith("_"):
                 continue
 
