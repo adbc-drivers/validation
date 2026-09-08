@@ -513,8 +513,8 @@ def render(
             columns[version.vendor][entry.lhs].add(entry)
 
     column_order = list(sorted(columns.keys(), key=lambda v: vendor_sort[v][0]))
-    row_order = list(
-        sorted(functools.reduce(lambda a, b: a | b, (set(c) for c in columns.values())))
+    row_order: list[str] = list(
+        sorted(functools.reduce(lambda a, b: a | b, (set(c) for c in columns.values())))  # type: ignore[ty:unsupported-operator]
     )
     type_select: list[list[Span]] = []
     for k in row_order:
@@ -596,7 +596,7 @@ def render(
         row_order = list(
             sorted(
                 functools.reduce(
-                    lambda a, b: a | b,
+                    lambda a, b: a | b,  # type: ignore[ty:unsupported-operator]
                     (set(c) for v in columns.values() for c in v.values()),
                 )
             )

@@ -18,6 +18,7 @@ import warnings
 
 import adbc_driver_manager.dbapi
 import pyarrow
+import pyarrow.compute
 import pytest
 
 if typing.TYPE_CHECKING:
@@ -268,3 +269,35 @@ def field_extension_name(field: pyarrow.Field) -> str | None:
     if extension_name is None:
         return None
     return extension_name.decode("utf-8")
+
+
+def sort_by(table: pyarrow.Table, sort_keys: list[tuple[str, str]]) -> pyarrow.Table:
+    """Sort a table, supporting view types."""
+    indices = pyarrow.compute.sort_indices(table, sort_keys=sort_keys)  # type: ignore[ty:unresolved-attribute]
+    return take(table, indices)
+
+
+def take(
+    table: pyarrow.Table, indices: pyarrow.Array | pyarrow.ChunkedArray
+) -> pyarrow.Table:
+    """Select rows by index, supporting view types."""
+    view_type_ids = {
+        pyarrow.types.TypesEnum.BINARY_VIEW,
+        pyarrow.types.TypesEnum.STRING_VIEW,
+    }
+    if not any(arr.type.id in view_type_ids for arr in table.columns):
+        # If there are no view types, we can use the built-in take
+        return table.take(indices)
+
+    # Otherwise, take individually; cast to non-view type and back
+    new_columns = []
+    for col in table.columns:
+        if col.type.id == pyarrow.types.TypesEnum.BINARY_VIEW:
+            taken = col.cast(pyarrow.binary()).take(indices).cast(col.type)
+            new_columns.append(taken)
+        elif col.type.id == pyarrow.types.TypesEnum.STRING_VIEW:
+            taken = col.cast(pyarrow.string()).take(indices).cast(col.type)
+            new_columns.append(taken)
+        else:
+            new_columns.append(col.take(indices))
+    return pyarrow.Table.from_arrays(new_columns, schema=table.schema)

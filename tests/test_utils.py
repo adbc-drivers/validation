@@ -14,6 +14,7 @@
 
 import traceback
 
+import pyarrow
 import pytest
 
 import adbc_drivers_validation.utils as utils
@@ -50,3 +51,48 @@ def test_merge_into() -> None:
     values = {"a": {"b": 2}}
     utils.merge_into(target, values)
     assert target == {"a": {"b": 2}}
+
+
+@pytest.fixture(params=["binary_view", "string_view"])
+def take_table(request: pytest.FixtureRequest) -> pyarrow.Table:
+    if request.param == "binary_view":
+        ty = pyarrow.binary_view()
+        schema = pyarrow.schema([("idx", pyarrow.int64()), ("col", ty)])
+        return pyarrow.table(
+            {
+                "idx": [0, 1, 2],
+                "col": [b"foo", b"bar", b"baz"],
+            },
+            schema=schema,
+        )
+    elif request.param == "string_view":
+        ty = pyarrow.string_view()
+        schema = pyarrow.schema([("idx", pyarrow.int64()), ("col", ty)])
+        return pyarrow.table(
+            {
+                "idx": [0, 1, 2],
+                "col": ["foo", "bar", "baz"],
+            },
+            schema=schema,
+        )
+    else:
+        raise ValueError(f"Unknown parameter: {request.param}")
+
+
+def test_take(take_table: pyarrow.Table) -> None:
+    table = utils.take(take_table, pyarrow.array([0, 1, 2]))
+    assert table.equals(take_table)
+
+
+@pytest.mark.xfail(raises=pyarrow.ArrowNotImplementedError)
+def test_pyarrow_take(take_table: pyarrow.Table) -> None:
+    table = take_table.take([0, 1, 2])
+    assert table.equals(take_table)
+
+
+def test_sort_by(take_table: pyarrow.Table) -> None:
+    table = utils.sort_by(take_table, [("idx", "ascending")])
+    assert table.equals(take_table)
+
+    table = utils.sort_by(take_table, [("idx", "descending")])
+    assert not table.equals(take_table)

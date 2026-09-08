@@ -145,7 +145,7 @@ def _sort_table_by_first_column(table: pyarrow.Table) -> pyarrow.Table:
     # ORDER BY here.
     if table.num_rows <= 1 or len(table.schema) == 0:
         return table
-    return table.sort_by([(table.schema[0].name, "ascending")])
+    return utils.sort_by(table, [(table.schema[0].name, "ascending")])
 
 
 class TestIngest:
