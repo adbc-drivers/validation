@@ -83,9 +83,11 @@ class TestStatement:
     ) -> str:
         table_name = "sample_table"
         quoted_name = driver.quote_identifier(table_name)
+        id_ = driver.quote_identifier("id")
+        value = driver.quote_identifier("value")
         with conn.cursor() as cursor:
             driver.try_drop_table(cursor, table_name=table_name)
-            query = f"CREATE TABLE {quoted_name} (id INT, value VARCHAR)"
+            query = f"CREATE TABLE {quoted_name} ({id_} INT, {value} VARCHAR)"
             query = driver.query_override("TestStatement.sample_table", query)
             cursor.adbc_statement.set_sql_query(query)
             cursor.adbc_statement.execute_update()
@@ -100,7 +102,8 @@ class TestStatement:
     ) -> None:
         # Regression test for https://github.com/adbc-drivers/mssql/issues/7
         with conn.cursor() as cursor:
-            query = f"SELECT id + 1 FROM {sample_table}"
+            id_ = driver.quote_identifier("id")
+            query = f"SELECT {id_} + 1 FROM {sample_table}"
             query = driver.query_override(
                 "TestStatement.test_execute_schema_noalias", query
             )
