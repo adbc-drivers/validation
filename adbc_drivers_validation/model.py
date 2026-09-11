@@ -319,7 +319,8 @@ class DriverQuirks(abc.ABC):
 
         Some databases have no way to do DROP IF EXISTS, so this method
         attempts to drop the table and catches errors that indicate the
-        table was not found.
+        table was not found.  Errors matching the driver's retry policy
+        (see is_retryable) are retried.
 
         Parameters
         ----------
@@ -336,19 +337,23 @@ class DriverQuirks(abc.ABC):
         temporary : bool
             If True, the table is a temporary table.
         """
-        try:
-            query = self.drop_table(
-                table_name=table_name,
-                schema_name=schema_name,
-                catalog_name=catalog_name,
-                temporary=temporary,
-            )
-            cursor.adbc_statement.set_sql_query(query)
-            cursor.adbc_statement.execute_update()
-        except adbc_driver_manager.Error as e:
-            # Some databases have no way to do DROP IF EXISTS
-            if not self.is_table_not_found(table_name=table_name, error=e):
-                raise
+        query = self.drop_table(
+            table_name=table_name,
+            schema_name=schema_name,
+            catalog_name=catalog_name,
+            temporary=temporary,
+        )
+
+        def drop() -> None:
+            try:
+                cursor.adbc_statement.set_sql_query(query)
+                cursor.adbc_statement.execute_update()
+            except adbc_driver_manager.Error as e:
+                # Some databases have no way to do DROP IF EXISTS
+                if not self.is_table_not_found(table_name=table_name, error=e):
+                    raise
+
+        utils.retry_adbc_operation(drop, self.is_retryable)
 
     @abc.abstractmethod
     def is_table_not_found(self, table_name: str | None, error: Exception) -> bool:

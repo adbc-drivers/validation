@@ -19,7 +19,6 @@ To use: import TestQuery and generate_tests, and from your own
 pytest_generate_tests hook, call generate_tests.
 """
 
-import time
 import typing
 
 import adbc_driver_manager.dbapi
@@ -140,23 +139,15 @@ class TestQuery:
         query: Query,
     ) -> typing.Generator[None, None, None]:
         """Run DDL for a query once across multiple subtests."""
-        for attempt in range(10):
-            try:
-                with setup_connection(query, conn):
-                    if driver.features.select_fixture_setup and not _uses_select_bind(
-                        driver, query
-                    ):
-                        _setup_query(driver, conn, query)
-            except adbc_driver_manager.Error as e:
-                if attempt < 9 and driver.is_retryable(e):
-                    delay = min(60, 2 ** (attempt + 2))
-                    print("backing off and trying again after", delay, "seconds")
-                    time.sleep(delay)
-                    continue
-                else:
-                    raise
-            else:
-                break
+
+        def setup_query() -> None:
+            with setup_connection(query, conn):
+                if driver.features.select_fixture_setup and not _uses_select_bind(
+                    driver, query
+                ):
+                    _setup_query(driver, conn, query)
+
+        utils.retry_adbc_operation(setup_query, driver.is_retryable)
         yield
 
     def test_lint_query(
@@ -239,22 +230,11 @@ class TestQuery:
             else:
                 # test_query has already bound the plain parameters into the table
                 # that query_setup created, so start over from a clean one.
-                for attempt in range(10):
-                    try:
-                        if driver.features.select_fixture_setup:
-                            _setup_query(driver, conn, query)
-                    except adbc_driver_manager.Error as e:
-                        if attempt < 9 and driver.is_retryable(e):
-                            delay = min(60, 2 ** (attempt + 2))
-                            print(
-                                "backing off and trying again after", delay, "seconds"
-                            )
-                            time.sleep(delay)
-                            continue
-                        else:
-                            raise
-                    else:
-                        break
+                if driver.features.select_fixture_setup:
+                    utils.retry_adbc_operation(
+                        lambda: _setup_query(driver, conn, query),
+                        driver.is_retryable,
+                    )
 
                 with conn.cursor() as cursor:
                     cursor.adbc_statement.set_sql_query(bind)

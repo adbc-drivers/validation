@@ -12,12 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import traceback
 
+import adbc_driver_manager
 import pyarrow
 import pytest
 
 import adbc_drivers_validation.utils as utils
+
+
+def test_retry_adbc_operation(monkeypatch: pytest.MonkeyPatch) -> None:
+    class RetryOnceDriver:
+        def __init__(self) -> None:
+            self.errors: list[Exception] = []
+
+        def is_retryable(self, error: Exception) -> bool:
+            self.errors.append(error)
+            return len(self.errors) == 1
+
+    attempts = 0
+    error = adbc_driver_manager.Error(
+        "retry requested",
+        status_code=adbc_driver_manager.AdbcStatusCode.IO,
+    )
+
+    def operation() -> int:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise error
+        return 42
+
+    delays: list[int] = []
+    monkeypatch.setattr(time, "sleep", delays.append)
+    driver = RetryOnceDriver()
+
+    assert utils.retry_adbc_operation(operation, driver.is_retryable) == 42
+    assert driver.errors == [error]
+    assert delays == [4]
 
 
 def test_scoped_trace() -> None:
