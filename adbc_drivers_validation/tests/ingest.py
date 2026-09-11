@@ -715,7 +715,7 @@ class TestIngest:
         data = data.slice(0, 2)
         data2 = data.slice(0, 1)
 
-        table_name = "test_ingest_replace_schema"
+        table_name = make_table_name("test_ingest_replace_schema", query)
         schema_name = driver.features.secondary_schema
         assert schema_name is not None
 
@@ -789,7 +789,7 @@ class TestIngest:
         data = data.slice(0, 2)
         data2 = data.slice(0, 1)
 
-        table_name = "test_ingest_replace_catalog"
+        table_name = make_table_name("test_ingest_replace_catalog", query)
         schema_name = driver.features.secondary_catalog_schema
         catalog_name = driver.features.secondary_catalog
         assert schema_name is not None
