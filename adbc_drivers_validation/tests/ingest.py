@@ -119,17 +119,29 @@ def _make_long_values(
     value_type: pyarrow.DataType, *, sizes: typing.Sequence[int] = _LONG_VALUE_SIZES
 ) -> list[str] | list[bytes]:
     """Create deterministic string or binary values from 1 to 128 KiB."""
-    if pyarrow.types.is_string(value_type):
+    if (
+        pyarrow.types.is_string(value_type)
+        or pyarrow.types.is_large_string(value_type)
+        or pyarrow.types.is_string_view(value_type)
+    ):
         return [
             (_LONG_STRING_PATTERN * ((size // len(_LONG_STRING_PATTERN)) + 1))[:size]
             for size in sizes
         ]
-    elif pyarrow.types.is_binary(value_type):
+    elif (
+        pyarrow.types.is_binary(value_type)
+        or pyarrow.types.is_large_binary(value_type)
+        or pyarrow.types.is_binary_view(value_type)
+    ):
         return [
             (_LONG_BINARY_PATTERN * ((size // len(_LONG_BINARY_PATTERN)) + 1))[:size]
             for size in sizes
         ]
-    raise TypeError(f"Expected string or binary type, got {value_type}")
+    raise TypeError(
+        "Expected a variable-length string or binary type "
+        "(string, large_string, string_view, binary, large_binary, binary_view), "
+        f"got {value_type}"
+    )
 
 
 def make_table_name(prefix: str, query: Query | str) -> str:
