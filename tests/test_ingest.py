@@ -17,23 +17,25 @@ import pytest
 
 from adbc_drivers_validation.tests.ingest import _make_long_values
 
-_EXPECTED_STRING = "0123456789abcdef" * 16 + "0"
-_EXPECTED_BINARY = bytes(range(256)) + b"\x00"
-
 
 @pytest.mark.parametrize(
-    "value_type,expected",
+    "value_type,value_class",
     [
-        pytest.param(pyarrow.string(), _EXPECTED_STRING, id="string"),
-        pytest.param(pyarrow.large_string(), _EXPECTED_STRING, id="large_string"),
-        pytest.param(pyarrow.string_view(), _EXPECTED_STRING, id="string_view"),
-        pytest.param(pyarrow.binary(), _EXPECTED_BINARY, id="binary"),
-        pytest.param(pyarrow.large_binary(), _EXPECTED_BINARY, id="large_binary"),
-        pytest.param(pyarrow.binary_view(), _EXPECTED_BINARY, id="binary_view"),
+        pytest.param(pyarrow.string(), str, id="string"),
+        pytest.param(pyarrow.large_string(), str, id="large_string"),
+        pytest.param(pyarrow.string_view(), str, id="string_view"),
+        pytest.param(pyarrow.binary(), bytes, id="binary"),
+        pytest.param(pyarrow.large_binary(), bytes, id="large_binary"),
+        pytest.param(pyarrow.binary_view(), bytes, id="binary_view"),
     ],
 )
-def test_make_long_values(value_type: pyarrow.DataType, expected: str | bytes) -> None:
-    assert _make_long_values(value_type, sizes=[257]) == [expected]
+def test_make_long_values(value_type: pyarrow.DataType, value_class: type) -> None:
+    sizes = [1, 257, 4096]
+    values = _make_long_values(value_type, sizes=sizes)
+    assert [len(value) for value in values] == sizes
+    assert all(isinstance(value, value_class) for value in values)
+    # Values must be deterministic so that expected results stay stable.
+    assert _make_long_values(value_type, sizes=sizes) == values
 
 
 def test_make_long_values_unsupported_type() -> None:
