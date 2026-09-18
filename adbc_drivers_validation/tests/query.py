@@ -41,6 +41,7 @@ def generate_tests(
     # Only value types that drivers widely support dictionary-encoded; pandas
     # categoricals of strings produce dictionary<values=large_string>.
     bind_dictionary_queries: set[str] = {"type/bind/string", "type/bind/large_string"},
+    bind_stream_queries: set[str] = {"type/bind/string", "type/bind/large_string"},
 ) -> None:
     """Parameterize the tests in this module for the given driver."""
     if utils.generate_tests_by_marks(all_quirks, metafunc):
@@ -79,13 +80,21 @@ def generate_tests(
             elif metafunc.definition.name == "test_query":
                 if not isinstance(query.query, model.SelectQuery):
                     continue
-            elif metafunc.definition.name == "test_query_bind_dictionary":
+            elif metafunc.definition.name in {
+                "test_query_bind_dictionary",
+                "test_query_bind_stream",
+            }:
                 if not isinstance(query.query, model.SelectQuery):
                     continue
                 if query.query.bind_query(quirks) is None:
                     continue
-                if query.name not in bind_dictionary_queries:
-                    # There's no need to test every type with every encoding
+                bind_queries = (
+                    bind_dictionary_queries
+                    if metafunc.definition.name == "test_query_bind_dictionary"
+                    else bind_stream_queries
+                )
+                if query.name not in bind_queries:
+                    # There's no need to test every type with every bind variant
                     continue
 
             combinations.append(
@@ -182,9 +191,7 @@ class TestQuery:
                         )
             else:
                 if bind:
-                    # TODO: also test with stream
-                    # TODO: also test with multiple batches in stream
-                    # TODO: also test with empty stream/empty batch
+                    # TODO: also test binding only empty inputs
                     data = subquery.bind_data().combine_chunks().to_batches()[0]
                     with conn.cursor() as cursor:
                         cursor.adbc_statement.set_sql_query(bind)
@@ -247,6 +254,66 @@ class TestQuery:
                             result = execute_query_without_prepare(
                                 cursor, subquery.query()
                             )
+
+        compare.compare_tables(subquery.expected_result(), result, query.metadata())
+
+    @pytest.mark.parametrize(
+        "batch_size,empty_batches",
+        [
+            pytest.param(None, False, id="single_batch"),
+            pytest.param(2, False, id="multiple_batches"),
+            pytest.param(2, True, id="multiple_batches_with_empty"),
+        ],
+    )
+    def test_query_bind_stream(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+        batch_size: int | None,
+        empty_batches: bool,
+    ) -> None:
+        """Bind a stream and consume all parameter batches in one execution."""
+        subquery = query.query
+        assert isinstance(subquery, model.SelectQuery)
+        bind = subquery.bind_query(driver)
+        assert bind is not None
+
+        data = subquery.bind_data().combine_chunks()
+        assert data.num_rows > 1, "Stream bind tests require multiple parameter rows"
+        batches = data.to_batches(max_chunksize=batch_size)
+        if empty_batches:
+            empty = batches[0].slice(0, 0)
+            # Empty batches before, between, and after data must not end the stream.
+            batches = [empty] + [part for batch in batches for part in (batch, empty)]
+
+        select_bind = _uses_select_bind(driver, query)
+        with setup_connection(query, conn):
+            if not select_bind and driver.features.select_fixture_setup:
+                utils.retry_adbc_operation(
+                    lambda: _setup_query(driver, conn, query), driver.is_retryable
+                )
+
+            with pyarrow.RecordBatchReader.from_batches(data.schema, batches) as stream:
+                with conn.cursor() as cursor:
+                    if select_bind:
+                        with driver.setup_statement(query, cursor):
+                            cursor.adbc_statement.set_sql_query(bind)
+                            cursor.adbc_statement.bind_stream(stream)
+                            handle, _ = cursor.adbc_statement.execute_query()
+                            with pyarrow.RecordBatchReader._import_from_c(
+                                handle.address
+                            ) as reader:
+                                result = reader.read_all()
+                    else:
+                        cursor.adbc_statement.set_sql_query(bind)
+                        cursor.adbc_statement.bind_stream(stream)
+                        cursor.adbc_statement.execute_update()
+
+            if not select_bind:
+                with conn.cursor() as cursor:
+                    with driver.setup_statement(query, cursor):
+                        result = execute_query_without_prepare(cursor, subquery.query())
 
         compare.compare_tables(subquery.expected_result(), result, query.metadata())
 
