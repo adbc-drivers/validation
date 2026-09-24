@@ -129,3 +129,19 @@ def test_sort_by(take_table: pyarrow.Table) -> None:
 
     table = utils.sort_by(take_table, [("idx", "descending")])
     assert not table.equals(take_table)
+
+
+def test_multiassert() -> None:
+    with pytest.raises(ExceptionGroup, match="multiple failures") as excinfo:
+        with utils.multiassert() as ma:
+            with ma():
+                assert 1 == 1
+                assert 1 == 2
+                assert 1 == 3
+
+            with ma():
+                assert 2 == 3
+
+    assert len(excinfo.value.exceptions) == 2
+    assert "1 == 2" in repr(excinfo.value.exceptions[0])
+    assert "2 == 3" in repr(excinfo.value.exceptions[1])

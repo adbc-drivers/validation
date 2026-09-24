@@ -211,6 +211,27 @@ def arrow_type_name(
     return str(arrow_type)
 
 
+@contextlib.contextmanager
+def multiassert() -> typing.Generator[
+    typing.Callable[[], contextlib.AbstractContextManager[None]], None, None
+]:
+    failures = []
+
+    @contextlib.contextmanager
+    def _multiassert_inner() -> typing.Generator[None, None, None]:
+        nonlocal failures
+        try:
+            yield
+        except AssertionError as e:
+            failures.append(e)
+
+    yield _multiassert_inner
+    if len(failures) == 1:
+        raise failures[0]
+    elif len(failures) > 1:
+        raise ExceptionGroup("multiple failures", failures)
+
+
 def assert_field_type_name(
     driver: "DriverQuirks",
     context: typing.Literal["query", "execute_schema", "get_table_schema"],
@@ -218,17 +239,20 @@ def assert_field_type_name(
     schema: pyarrow.Schema,
 ) -> None:
     field_name = (f"{driver.field_metadata_prefix}:type").encode("utf-8")
-    if driver.features.metadata_type_name:
-        for i, field in enumerate(schema):
-            assert field.metadata is not None
-            assert field_name in field.metadata
-            assert field.metadata[field_name].decode(
-                "utf-8"
-            ) == query.metadata().tags.metadata_type_name(context, i)
-    else:
-        for field in schema:
-            if field.metadata is not None:
-                assert field_name not in field.metadata
+    with multiassert() as ma:
+        if driver.features.metadata_type_name:
+            for i, field in enumerate(schema):
+                with ma(), scoped_trace(f"field {i} ({field.name})"):
+                    assert field.metadata is not None
+                    assert field_name in field.metadata
+                    assert field.metadata[field_name].decode(
+                        "utf-8"
+                    ) == query.metadata().tags.metadata_type_name(context, i)
+        else:
+            for i, field in enumerate(schema):
+                with ma(), scoped_trace(f"field {i} ({field.name})"):
+                    if field.metadata is not None:
+                        assert field_name not in field.metadata
 
 
 def generate_tests_by_marks(
