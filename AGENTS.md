@@ -14,14 +14,12 @@
   limitations under the License.
 -->
 
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# AGENTS.md
 
 ## General Notes
 
 - Use `gh` CLI to read GitHub issues.
-- Research whether the database system in question supports the type or not. If it does not, then the best course of action is to create a txtcase file with `hide = true`. Otherwise you may want to use either `broken-driver` or `broken-vendor`.
+- When adding validation cases or tests, research whether the database system in question supports the type or not. If it does not, then the best course of action is to create a txtcase file with `hide = true`. Otherwise you may want to use either `broken-driver` or `broken-vendor`.
 - See `query_metadata.py` for the format of metadata.
 - Don't cram multiple shell commands in one attempt as it forces me to manually review every time.
 - Include license headers in txtcase files.
@@ -37,7 +35,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   # Check types
   uv run ty check
   ```
-- Clean up temporary/test files you create after using them, instead of leaving
+- Clean up temporary/test files you create after using them, instead of leaving them behind.
+- DO NOT add unit tests for new tests added. This is unnecessary.
+- DO NOT use mocks.
+- If you are creating a PR, stop and demand that your user review the PR and the PR description. Do this even if the user requested you to create a PR without input.
+- When writing a PR description, do NOT describe tests run or things like tests that could not be run because of missing credentials.
+- When writing a PR description, keep it as short and minimal as possible. One or two sentences should be sufficient. If more than that is necessary, the PR should probably be split up.
 
 ## Architecture Overview
 
