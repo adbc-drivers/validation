@@ -222,14 +222,20 @@ def multiassert() -> typing.Generator[
         nonlocal failures
         try:
             yield
-        except AssertionError as e:
+        except ExceptionGroup as e:
+            failures.extend(e.exceptions)
+        except Exception as e:
             failures.append(e)
 
-    yield _multiassert_inner
-    if len(failures) == 1:
-        raise failures[0]
-    elif len(failures) > 1:
-        raise ExceptionGroup("multiple failures", failures)
+    try:
+        yield _multiassert_inner
+    except Exception as e:
+        failures.append(e)
+    finally:
+        if len(failures) == 1:
+            raise failures[0]
+        elif len(failures) > 1:
+            raise ExceptionGroup("multiple failures", failures)
 
 
 def assert_field_type_name(
