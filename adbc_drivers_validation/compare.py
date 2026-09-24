@@ -201,66 +201,80 @@ def compare_fields(
     if field_path:
         path += "."
 
-    # IMO, this is a design flaw in PyArrow/Arrow C++ (but is not a flaw in
-    # Nanoarrow/Arrow Java): child fields are part of the _type_. So to
-    # generically manipulate a field like we want to do here, we have to know
-    # the type of the field.  It would help if there were accessors to list
-    # the children for us based on the type, instead of having to hardcode
-    # this knowledge all over the place.
+    try:
+        # IMO, this is a design flaw in PyArrow/Arrow C++ (but is not a flaw in
+        # Nanoarrow/Arrow Java): child fields are part of the _type_. So to
+        # generically manipulate a field like we want to do here, we have to know
+        # the type of the field.  It would help if there were accessors to list
+        # the children for us based on the type, instead of having to hardcode
+        # this knowledge all over the place.
 
-    assert expected.name == actual.name, (
-        f"Field names do not match: expected {path}{expected.name} != actual {path}{actual.name}"
-    )
-    # TODO: we should compare type.id, then manually recurse into child fields
-    # and provide field_path so that we can have a nicer diff of nested types.
-    # But this is all much more annoying than necessary (also because there's
-    # no built in to stringify type.id)
+        assert expected.name == actual.name, (
+            f"Field names do not match: expected {path}{expected.name} != actual {path}{actual.name}"
+        )
+        # TODO: we should compare type.id, then manually recurse into child fields
+        # and provide field_path so that we can have a nicer diff of nested types.
+        # But this is all much more annoying than necessary (also because there's
+        # no built in to stringify type.id)
 
-    assert expected.type == actual.type, (
-        f"Field types do not match: expected {path}{expected.name} ({expected.type}) != actual {path}{actual.name} ({actual.type})"
-    )
-    assert expected.nullable == actual.nullable, (
-        f"Field nullability does not match: expected {path}{expected.name} ({expected.nullable}) != actual {path}{actual.name} ({actual.nullable})"
-    )
+        # N.B. this assertion will be confusing if expected is a canonical
+        # extension type, because the actual type will be the storage type and
+        # we won't see the actual extension name; hence why we use add_note
+        # below
+        assert expected.type == actual.type, (
+            f"Field types do not match: expected {path}{expected.name} ({expected.type}) != actual {path}{actual.name} ({actual.type})"
+        )
+        assert expected.nullable == actual.nullable, (
+            f"Field nullability does not match: expected {path}{expected.name} ({expected.nullable}) != actual {path}{actual.name} ({actual.nullable})"
+        )
 
-    # Another design flaw in PyArrow is that there is apparently no generic
-    # extension type, so an extension type that isn't registered gets
-    # invisibly treated as the storage type.  Also because extension types are
-    # really just metadata, they silently compare equal.  (It's a little
-    # inconsistent: are extension types separate types or not?  The global
-    # registry also has shades of the Protobuf issues; an explicit registry is
-    # probably more annoying but would be preferable personally so that I
-    # don't have to handle both treatments of extension types here.  Either I
-    # want no extension types or I want all extension types, instead I have to
-    # handle it both ways.)
+        # Another design flaw in PyArrow is that there is apparently no generic
+        # extension type, so an extension type that isn't registered gets
+        # invisibly treated as the storage type.  Also because extension types are
+        # really just metadata, they silently compare equal.  (It's a little
+        # inconsistent: are extension types separate types or not?  The global
+        # registry also has shades of the Protobuf issues; an explicit registry is
+        # probably more annoying but would be preferable personally so that I
+        # don't have to handle both treatments of extension types here.  Either I
+        # want no extension types or I want all extension types, instead I have to
+        # handle it both ways.)
 
-    # There's no need to handle ExtensionType/BaseExtensionType here
-    # explicitly.  They would have compared equal or unequal already.  This is
-    # only to handle normal-types-with-invisible-extension-metadata.
-    expected_metadata = expected.metadata or {}
-    actual_metadata = actual.metadata or {}
-    expected_extension_name = expected_metadata.get(b"ARROW:extension:name", None)
-    expected_extension_metadata = expected_metadata.get(
-        b"ARROW:extension:metadata", None
-    )
-    actual_extension_name = actual_metadata.get(b"ARROW:extension:name", None)
-    actual_extension_metadata = actual_metadata.get(b"ARROW:extension:metadata", None)
+        # There's no need to handle ExtensionType/BaseExtensionType here
+        # explicitly.  They would have compared equal or unequal already.  This is
+        # only to handle normal-types-with-invisible-extension-metadata.
+        expected_metadata = expected.metadata or {}
+        actual_metadata = actual.metadata or {}
+        expected_extension_name = expected_metadata.get(b"ARROW:extension:name", None)
+        expected_extension_metadata = expected_metadata.get(
+            b"ARROW:extension:metadata", None
+        )
+        actual_extension_name = actual_metadata.get(b"ARROW:extension:name", None)
+        actual_extension_metadata = actual_metadata.get(
+            b"ARROW:extension:metadata", None
+        )
 
-    assert expected_extension_name == actual_extension_name, (
-        f"Field extension names do not match: expected {path}{expected.name} ({expected_extension_name}) != actual {path}{actual.name} ({actual_extension_name})"
-    )
+        assert expected_extension_name == actual_extension_name, (
+            f"Field extension names do not match: expected {path}{expected.name} ({expected_extension_name}) != actual {path}{actual.name} ({actual_extension_name})"
+        )
 
-    assert expected_extension_metadata == actual_extension_metadata, (
-        f"Field extension metadata does not match: expected {path}{expected.name} ({expected_extension_metadata}) != actual {path}{actual.name} ({actual_extension_metadata})"
-    )
+        assert expected_extension_metadata == actual_extension_metadata, (
+            f"Field extension metadata does not match: expected {path}{expected.name} ({expected_extension_metadata}) != actual {path}{actual.name} ({actual_extension_metadata})"
+        )
 
-    # For now, allow extra metadata
-    actual_subset = {
-        key: actual_metadata[key] for key in expected_metadata if key in actual_metadata
-    }
-    assert expected_metadata == actual_subset, (
-        f"Field metadata does not match: expected {path}{expected.name} ({expected_metadata}) != actual {path}{actual.name} ({actual_metadata})"
-    )
+        # For now, allow extra metadata
+        actual_subset = {
+            key: actual_metadata[key]
+            for key in expected_metadata
+            if key in actual_metadata
+        }
+        assert expected_metadata == actual_subset, (
+            f"Field metadata does not match: expected {path}{expected.name} ({expected_metadata}) != actual {path}{actual.name} ({actual_metadata})"
+        )
+    except Exception as e:
+        e.add_note(f"actual field name: {actual.name!r}")
+        e.add_note(f"actual field type: {actual.type!r}")
+        e.add_note(f"actual field meta: {actual.metadata!r}")
+        raise
 
 
 def compare_schemas(
