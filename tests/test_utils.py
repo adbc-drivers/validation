@@ -129,3 +129,85 @@ def test_sort_by(take_table: pyarrow.Table) -> None:
 
     table = utils.sort_by(take_table, [("idx", "descending")])
     assert not table.equals(take_table)
+
+
+def test_multiassert() -> None:
+    with pytest.raises(ExceptionGroup, match="multiple failures") as excinfo:
+        with utils.multiassert() as ma:
+            with ma():
+                assert 1 == 1
+                assert 1 == 2
+                assert 1 == 3
+
+            with ma():
+                assert 2 == 3
+
+            with ma():
+                assert 1 == 1
+
+    assert len(excinfo.value.exceptions) == 2
+    assert "1 == 2" in repr(excinfo.value.exceptions[0])
+    assert "2 == 3" in repr(excinfo.value.exceptions[1])
+
+
+def test_multiassert_single() -> None:
+    with pytest.raises(AssertionError, match="1 == 2"):
+        with utils.multiassert() as ma:
+            with ma():
+                assert 1 == 1
+                assert 1 == 2
+
+    with pytest.raises(AssertionError, match="1 == 2"):
+        with utils.multiassert() as ma:
+            with ma():
+                assert 1 == 1
+            assert 1 == 2
+
+    with pytest.raises(ValueError, match="foobar"):
+        with utils.multiassert() as ma:
+            with ma():
+                raise ValueError("foobar")
+
+    with pytest.raises(ValueError, match="foobar"):
+        with utils.multiassert() as ma:
+            with ma():
+                pass
+            raise ValueError("foobar")
+
+
+def test_multiassert_outside() -> None:
+    with pytest.raises(ExceptionGroup, match="multiple failures") as excinfo:
+        with utils.multiassert() as ma:
+            with ma():
+                assert 1 == 2
+            assert 1 == 3
+
+    assert len(excinfo.value.exceptions) == 2
+    assert "1 == 2" in repr(excinfo.value.exceptions[0])
+    assert "1 == 3" in repr(excinfo.value.exceptions[1])
+
+
+def test_multiassert_nested() -> None:
+    with pytest.raises(ExceptionGroup, match="multiple failures") as excinfo:
+        with utils.multiassert() as ma:
+            with ma():
+                with utils.multiassert() as ma2:
+                    with ma2():
+                        assert 1 == 1
+
+                    with ma2():
+                        assert 1 == 2
+
+                    with ma2():
+                        assert 1 == 3
+
+            with ma():
+                assert 2 == 3
+
+            with ma():
+                assert 1 == 1
+
+    assert len(excinfo.value.exceptions) == 3
+    assert "1 == 2" in repr(excinfo.value.exceptions[0])
+    assert "1 == 3" in repr(excinfo.value.exceptions[1])
+    assert "2 == 3" in repr(excinfo.value.exceptions[2])
