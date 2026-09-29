@@ -381,9 +381,15 @@ class DriverQuirks(abc.ABC):
 
     def qualify_temp_table(
         self, cursor: adbc_driver_manager.dbapi.Cursor, name: str
-    ) -> str:
+    ) -> list[str]:
         """
-        Return the fully escaped name of a temporary table.
+        Return the full path to a temporary table.
+
+        Databases vary in how they treat temporary tables, so this tries to
+        avoid ambiguity: some put them in a separate catalog or schema; others
+        use special naming schemes but put them in the same schema. Some
+        generate the schema name dynamically, so we need the cursor to
+        discover this at runtime.
         """
         raise NotImplementedError
 
