@@ -16,6 +16,7 @@
 
 import dataclasses
 import difflib
+import itertools
 import typing
 
 import plpygis
@@ -277,6 +278,111 @@ def compare_fields(
         raise
 
 
+def type_name(ty: pyarrow.DataType) -> str:
+    # TODO: need to show type parameters
+    if ty.id == 31:
+        return type_name(ty.storage_type)
+    elif isinstance(ty, (pyarrow.Decimal128Type, pyarrow.Decimal256Type, pyarrow.Decimal32Type, pyarrow.Decimal64Type)):
+        return str(ty)
+    elif isinstance(ty, pyarrow.DictionaryType):
+        return f"dictionary<index={type_name(ty.index_type)}>"
+    name = {
+        pyarrow.lib.Type_BINARY: "binary",
+        pyarrow.lib.Type_BINARY_VIEW: "binary_view",
+        pyarrow.lib.Type_BOOL: "bool",
+        pyarrow.lib.Type_DATE32: "date32",
+        pyarrow.lib.Type_DATE64: "date64",
+        pyarrow.lib.Type_DENSE_UNION: "dense_union",
+        pyarrow.lib.Type_DICTIONARY: "dictionary",
+        pyarrow.lib.Type_DOUBLE: "double",
+        pyarrow.lib.Type_DURATION: "duration",
+        pyarrow.lib.Type_FIXED_SIZE_BINARY: "fixed_size_binary",
+        pyarrow.lib.Type_FIXED_SIZE_LIST: "fixed_size_list",
+        pyarrow.lib.Type_FLOAT: "float",
+        pyarrow.lib.Type_HALF_FLOAT: "half_float",
+        pyarrow.lib.Type_INT16: "int16",
+        pyarrow.lib.Type_INT32: "int32",
+        pyarrow.lib.Type_INT64: "int64",
+        pyarrow.lib.Type_INT8: "int8",
+        pyarrow.lib.Type_INTERVAL_MONTH_DAY_NANO: "interval_month_day_nano",
+        pyarrow.lib.Type_LARGE_BINARY: "large_binary",
+        pyarrow.lib.Type_LARGE_LIST: "large_list",
+        pyarrow.lib.Type_LARGE_LIST_VIEW: "large_list_view",
+        pyarrow.lib.Type_LARGE_STRING: "large_string",
+        pyarrow.lib.Type_LIST: "list",
+        pyarrow.lib.Type_LIST_VIEW: "list_view",
+        pyarrow.lib.Type_MAP: "map",
+        pyarrow.lib.Type_NA: "na",
+        pyarrow.lib.Type_RUN_END_ENCODED: "run_end_encoded",
+        pyarrow.lib.Type_SPARSE_UNION: "sparse_union",
+        pyarrow.lib.Type_STRING: "string",
+        pyarrow.lib.Type_STRING_VIEW: "string_view",
+        pyarrow.lib.Type_STRUCT: "struct",
+        pyarrow.lib.Type_TIME32: "time32",
+        pyarrow.lib.Type_TIME64: "time64",
+        pyarrow.lib.Type_TIMESTAMP: "timestamp",
+        pyarrow.lib.Type_UINT16: "uint16",
+        pyarrow.lib.Type_UINT32: "uint32",
+        pyarrow.lib.Type_UINT64: "uint64",
+        pyarrow.lib.Type_UINT8: "uint8",
+    }.get(ty.id)
+    if name is None:
+        raise NotImplementedError(f"Unsupported type: {ty!r}")
+    return name
+
+
+def type_extension(field: pyarrow.Field) -> tuple[str, str | None] | None:
+    # COMPLAINT: PyArrow doesn't generically expose extension metadata, so we
+    # have to hardcode each extension type that's built into PyArrow.
+    if isinstance(field.type, pyarrow.JsonType):
+        return field.type.extension_name, None
+    elif isinstance(field.type, pyarrow.BaseExtensionType):
+        raise NotImplementedError(f"Unsupported extension: {field.type!r} ({type(field.type)})")
+    elif not field.metadata or b"ARROW:extension:name" not in field.metadata:
+        return None
+
+    extension_name = field.metadata[b"ARROW:extension:name"].decode("utf-8")
+    extension_metadata = field.metadata.get(b"ARROW:extension:metadata")
+    if extension_metadata is not None:
+        extension_metadata = extension_metadata.decode("utf-8")
+    return extension_name, extension_metadata
+
+
+def format_field(field: pyarrow.Field, field_path: tuple[str, ...], expected_metadata_fields: list[str] | None) -> list[str]:
+    lines = []
+    lines.append("name          : " + (".".join(field_path + (field.name,))))
+    lines.append(f"type          : {type_name(field.type)}")
+
+    extension = type_extension(field)
+    if extension is not None:
+        extension_name, extension_metadata = extension
+        lines.append(f"extension name: {extension_name}")
+        if extension_metadata is not None:
+            lines.append(f"extension meta: {extension_metadata!r}")
+
+    lines.append(f"nullable      : {'nullable' if field.nullable else 'not null'}")
+    for k, v in (field.metadata or {}).items():
+        k = k.decode('utf-8')  # assume UTF8 because Schema.fbs uses string
+        v = v.decode('utf-8')
+        if k == "ARROW:extension:name" or k == "ARROW:extension:metadata":
+            continue
+        if expected_metadata_fields is not None and k not in expected_metadata_fields:
+            continue
+        lines.append(f"meta          : {k} = {v}")
+
+    # TODO: dictionary is not _actually_ a nested type and has no child fields, but is basically a nested type; needs special handling
+    for i in range(field.type.num_fields):
+        child_field = field.type.field(i)
+        # TODO: union type codes
+        # TODO: expected_metadata_fields breaks down for nested types; an ignorelist in the quirks would be better + warn if ignoring anything in the expected field
+        for i, line in enumerate(format_field(child_field, field_path + (field.name,), expected_metadata_fields)):
+            if i == 0:
+                lines.append("- " + line)
+            else:
+                lines.append("  " + line)
+    return lines
+
+
 def compare_schemas(
     expected: pyarrow.Schema,
     actual: pyarrow.Schema,
@@ -285,9 +391,42 @@ def compare_schemas(
     actual = make_nullable(actual)
     assert len(expected) == len(actual), "Schemas do not match"
 
-    # TODO: I think this would be better if we used difflib
-    for expected_field, actual_field in zip(expected, actual):
-        compare_fields(expected_field, actual_field, ())
+    expected_schema_repr = []
+    actual_schema_repr = []
+
+    for expected_field, actual_field in itertools.zip_longest(list(expected), list(actual)):
+        if expected_field is not None:
+            expected_schema_repr.extend(format_field(expected_field, (), None))
+            expected_schema_repr.append("---")
+        if actual_field is not None:
+            expected_metadata_fields = None
+            if expected_field is not None:
+                expected_metadata_fields = [k.decode('utf-8') for k in (expected_field.metadata or {}).keys()]
+            actual_schema_repr.extend(format_field(actual_field, (), expected_metadata_fields))
+            actual_schema_repr.append("---")
+
+    if expected_schema_repr != actual_schema_repr:
+        diff = difflib.unified_diff(
+            expected_schema_repr,
+            actual_schema_repr,
+            fromfile="expected",
+            tofile="actual",
+            lineterm="",
+        )
+        raise AssertionError(f"Schemas do not match! Diff:\n{'\n'.join(diff)}\n")
+
+
+    # # TODO: I think this would be better if we used difflib
+    # group = []
+    # for expected_field, actual_field in zip(expected, actual):
+    #     try:
+    #         compare_fields(expected_field, actual_field, ())
+    #     except AssertionError as e:
+    #         group.append(e)
+    # if len(group) == 1:
+    #     raise group[0]
+    # elif len(group) > 1:
+    #     raise ExceptionGroup("Multiple schema mismatches", group)
 
 
 def sort_oblivious(table: pyarrow.Table, sort_keys: typing.Any) -> pyarrow.Table:

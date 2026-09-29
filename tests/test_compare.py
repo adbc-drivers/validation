@@ -282,3 +282,27 @@ def test_compare_variant_sql_null_differs_from_variant_null() -> None:
 def test_variant_truncated_fixed_size_values_raise_value_error(encoded: bytes) -> None:
     with pytest.raises(ValueError, match="truncated"):
         variant.parse_variant(b"\x01\x00\x00", encoded)
+
+
+@pytest.mark.parametrize(
+    "dt,name",
+    [
+        pytest.param(dt, name, id=name)
+        for dt, name in [
+                (pyarrow.binary(), "binary"),
+                (pyarrow.binary_view(), "binary_view"),
+                (pyarrow.bool_(), "bool"),
+                (pyarrow.date32(), "date32"),
+                (pyarrow.date64(), "date64"),
+                (pyarrow.decimal128(10, 2), "decimal128(10, 2)"),
+                (pyarrow.decimal256(20, 5), "decimal256(20, 5)"),
+                (pyarrow.decimal32(5, 2), "decimal32(5, 2)"),
+                (pyarrow.decimal64(10, 2), "decimal64(10, 2)"),
+                (pyarrow.float16(), "half_float"),
+                (pyarrow.dense_union([pyarrow.field("name", pyarrow.int16())]), "dense_union"),
+                (pyarrow.dictionary(pyarrow.int32(), pyarrow.string()), "dictionary<index=int32>"),
+        ]
+    ]
+)
+def test_type_name(dt: pyarrow.DataType, name: str) -> None:
+    assert compare.type_name(dt) == name
