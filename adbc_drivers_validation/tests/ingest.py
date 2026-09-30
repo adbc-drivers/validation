@@ -49,12 +49,13 @@ def generate_tests(
 
     for quirks in all_quirks:
         driver_param = f"{quirks.name}:{quirks.short_version}"
+        features = quirks.features
         enabled = {
-            "test_ingest_no_parameters": quirks.features.statement_bulk_ingest,
-            "test_not_null": quirks.features.statement_bulk_ingest,
-            "test_schema": quirks.features.statement_bulk_ingest_schema,
-            "test_catalog": quirks.features.statement_bulk_ingest_catalog,
-            "test_many_columns": quirks.features.statement_bulk_ingest,
+            "test_ingest_no_parameters": features.statement_bulk_ingest,
+            "test_not_null": features.statement_bulk_ingest,
+            "test_schema": features.statement_bulk_ingest_schema,
+            "test_catalog": features.statement_bulk_ingest_catalog,
+            "test_many_columns": features.statement_bulk_ingest,
         }.get(metafunc.definition.name, None)
         if enabled is not None:
             marks = []
@@ -69,10 +70,12 @@ def generate_tests(
 
         param_string = "driver,query"
         enabled = {
-            "test_ingest_then_query": quirks.features.statement_bulk_ingest,
-            "test_replace_catalog": quirks.features.statement_bulk_ingest_catalog,
-            "test_replace_schema": quirks.features.statement_bulk_ingest_schema,
-            "test_temporary": quirks.features.statement_bulk_ingest_temporary,
+            "test_ingest_then_query": features.statement_bulk_ingest,
+            "test_replace_catalog": features.statement_bulk_ingest_catalog,
+            "test_replace_schema": features.statement_bulk_ingest_schema,
+            "test_temporary": features.statement_bulk_ingest_temporary,
+            "test_temporary_get_objects": features.statement_bulk_ingest_temporary
+            and features.get_objects,
         }.get(metafunc.definition.name, None)
         for query in quirks.query_set.queries.values():
             marks = []
@@ -611,7 +614,7 @@ class TestIngest:
         data = subquery.input()
         expected = subquery.expected()
 
-        table_name = "test_ingest_temporary"
+        table_name = make_table_name("test_ingest_temporary", query)
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
@@ -620,7 +623,9 @@ class TestIngest:
                 with conn.cursor() as cursor:
                     driver.try_drop_table(cursor, table_name=table_name)
                     cursor.adbc_ingest(table_name, data, temporary=True)
-                    temp_table = driver.qualify_temp_table(cursor, table_name)
+                    temp_table = driver.quote_identifier(
+                        *driver.qualify_temp_table(cursor, table_name)
+                    )
                     select_temporary = (
                         f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
                     )
@@ -631,7 +636,9 @@ class TestIngest:
 
             with conn_factory() as conn:
                 with conn.cursor() as cursor:
-                    temp_table = driver.qualify_temp_table(cursor, table_name)
+                    temp_table = driver.quote_identifier(
+                        *driver.qualify_temp_table(cursor, table_name)
+                    )
                     select_temporary = (
                         f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
                     )
@@ -652,7 +659,9 @@ class TestIngest:
                         driver.features.current_schema,
                         table_name,
                     )
-                    temp_table = driver.qualify_temp_table(cursor, table_name)
+                    temp_table = driver.quote_identifier(
+                        *driver.qualify_temp_table(cursor, table_name)
+                    )
                     select_normal = (
                         f"SELECT {idx}, {value} FROM {normal_table} ORDER BY {idx} ASC"
                     )
@@ -667,6 +676,60 @@ class TestIngest:
 
             compare.compare_tables(expected.slice(0, 1), result_temporary)
             compare.compare_tables(expected.slice(1), result_normal)
+
+    def test_temporary_get_objects(
+        self,
+        driver: model.DriverQuirks,
+        conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
+        query: Query,
+    ) -> None:
+        """Ensure GetObjects returns a temporary table."""
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+        data = subquery.input()
+        table_name = make_table_name("test_ingest_temporary_get_objects", query)
+
+        with conn_factory() as conn:
+            with conn.cursor() as cursor:
+                driver.try_drop_table(cursor, table_name=table_name)
+                cursor.adbc_ingest(table_name, data, temporary=True)
+                parts = driver.qualify_temp_table(cursor, table_name)
+
+            if len(parts) == 3:
+                catalog_name, schema_name, table_name = parts
+                kwargs = {
+                    "catalog_filter": catalog_name,
+                    "db_schema_filter": schema_name,
+                    "table_name_filter": table_name,
+                }
+            elif len(parts) == 2:
+                # assume it's schema; we'll have to decide how to handle this when this comes up
+                schema_name, table_name = parts
+                kwargs = {
+                    "db_schema_filter": schema_name,
+                    "table_name_filter": table_name,
+                }
+            elif len(parts) == 1:
+                table_name = parts[0]
+                kwargs = {
+                    "table_name_filter": table_name,
+                }
+            else:
+                raise ValueError(
+                    f"Expected 1-3 parts from qualify_temp_table, got {len(parts)}"
+                )
+            objects = (
+                conn.adbc_get_objects(depth="tables", **kwargs)  # type: ignore[ty:invalid-argument-type]
+                .read_all()
+                .to_pylist()
+            )
+            tables = [
+                table["table_name"]
+                for obj in objects
+                for schema in obj["catalog_db_schemas"]
+                for table in schema["db_schema_tables"]
+            ]
+            assert tables == [table_name]
 
     def test_schema(
         self,
