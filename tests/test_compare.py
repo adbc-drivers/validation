@@ -147,6 +147,26 @@ def test_compare_schemas_nullability() -> None:
             id="timestamp[s, -00:30]",
         ),
         pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("ms")),
+            "1970-01-01T00:00:00.001",
+            id="timestamp[ms]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("ms", "UTC")),
+            "1970-01-01T00:00:00.001Z",
+            id="timestamp[ms, UTC]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("us")),
+            "1970-01-01T00:00:00.000001",
+            id="timestamp[us]",
+        ),
+        pytest.param(
+            pyarrow.scalar(1, pyarrow.timestamp("us", "UTC")),
+            "1970-01-01T00:00:00.000001Z",
+            id="timestamp[us, UTC]",
+        ),
+        pytest.param(
             pyarrow.scalar(1, pyarrow.timestamp("ns")),
             "1970-01-01T00:00:00.000000001",
             id="timestamp[ns]",
