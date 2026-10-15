@@ -139,6 +139,16 @@ def conn_factory(
     conn_kwargs = {}
     stmt_kwargs = {}
 
+    for k, v in driver.setup.connection.items():
+        if isinstance(v, model.FromEnv):
+            if (value := v.get()) is None:
+                if v.optional:
+                    continue
+                pytest.skip(f"Must set {v.env}")
+            conn_kwargs[k] = value
+        else:
+            conn_kwargs[k] = v
+
     for k, v in driver.setup.statement.items():
         if isinstance(v, model.FromEnv):
             if (value := v.get()) is None:
