@@ -19,7 +19,12 @@ from adbc_drivers_validation.model import FromEnv
 
 def test_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FOO", "bar")
+    assert FromEnv("FOO").get() == "bar"
     assert FromEnv("FOO").get_or_raise() == "bar"
     assert FromEnv("FOO", template="foo{}").get_or_raise() == "foobar"
     with pytest.raises(ValueError):
         FromEnv("BAR").get_or_raise()
+
+    assert FromEnv("BAR").get() is None
+    assert FromEnv("BAR", optional=True).get() is None
+    assert FromEnv("BAR", optional=True).get_or_raise() is None
