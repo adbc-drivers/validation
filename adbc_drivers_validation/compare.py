@@ -139,11 +139,17 @@ def scalar_to_py_smart(
             case "s":
                 instant = whenever.Instant.from_timestamp(value.value)
             case "ms":
-                instant = whenever.Instant.from_timestamp_millis(value.value)
+                instant = whenever.Instant.from_timestamp(
+                    value.value, unit="millisecond"
+                )
             case "us":
-                instant = whenever.Instant.from_timestamp_nanos(value.value * 1000)
+                instant = whenever.Instant.from_timestamp(
+                    value.value, unit="microsecond"
+                )
             case "ns":
-                instant = whenever.Instant.from_timestamp_nanos(value.value)
+                instant = whenever.Instant.from_timestamp(
+                    value.value, unit="nanosecond"
+                )
 
         if value.type.tz is None or value.type.tz == "":
             # A bit sketch
