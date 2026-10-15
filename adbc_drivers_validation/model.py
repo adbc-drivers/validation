@@ -93,7 +93,9 @@ class FromEnv(BaseModel):
     template: str | None = Field(default=None, description="Format the value")
     optional: bool = Field(description="This field is optional", default=False)
 
-    def __init__(self, env: str, *, template: str | None = None, optional: bool=False) -> None:
+    def __init__(
+        self, env: str, *, template: str | None = None, optional: bool = False
+    ) -> None:
         super().__init__(env=env, template=template, optional=optional)
 
     def get(self) -> str | None:
