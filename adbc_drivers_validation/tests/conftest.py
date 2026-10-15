@@ -118,9 +118,11 @@ def db_kwargs(
     db_kwargs = {}
     for k, v in driver.setup.database.items():
         if isinstance(v, model.FromEnv):
-            if v.env not in os.environ:
+            if (value := v.get()) is None:
+                if v.optional:
+                    continue
                 pytest.skip(f"Must set {v.env}")
-            db_kwargs[k] = v.get_or_raise()
+            db_kwargs[k] = value
         else:
             db_kwargs[k] = v
     return db_kwargs
@@ -139,9 +141,11 @@ def conn_factory(
 
     for k, v in driver.setup.statement.items():
         if isinstance(v, model.FromEnv):
-            if v.env not in os.environ:
+            if (value := v.get()) is None:
+                if v.optional:
+                    continue
                 pytest.skip(f"Must set {v.env}")
-            stmt_kwargs[k] = v.get_or_raise()
+            stmt_kwargs[k] = value
         else:
             stmt_kwargs[k] = v
 

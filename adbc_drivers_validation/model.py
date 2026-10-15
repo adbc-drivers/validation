@@ -91,16 +91,23 @@ class FromEnv(BaseModel):
 
     env: str = Field(description="Environment variable to read the value from")
     template: str | None = Field(default=None, description="Format the value")
+    optional: bool = Field(description="This field is optional", default=False)
 
-    def __init__(self, env: str, *, template: str | None = None) -> None:
-        super().__init__(env=env, template=template)
+    def __init__(self, env: str, *, template: str | None = None, optional: bool=False) -> None:
+        super().__init__(env=env, template=template, optional=optional)
 
-    def get_or_raise(self) -> str:
+    def get(self) -> str | None:
         value = os.environ.get(self.env)
         if value is None:
-            raise ValueError(f"Must set {self.env}")
+            return None
         if self.template:
             value = self.template.format(value)
+        return value
+
+    def get_or_raise(self) -> str | None:
+        value = self.get()
+        if value is None and not self.optional:
+            raise ValueError(f"Must set {self.env}")
         return value
 
 
