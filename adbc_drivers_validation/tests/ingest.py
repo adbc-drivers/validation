@@ -37,6 +37,7 @@ def generate_tests(
     all_quirks: list[model.DriverQuirks],
     metafunc: pytest.Metafunc,
     *,
+    ingest_dictionary_queries: set[str] = {"ingest/string", "ingest/large_string"},
     ingest_mode_queries: set[str] = {"ingest/string"},
     long_value_queries: set[str] = {"ingest/string", "ingest/binary"},
 ) -> None:
@@ -90,6 +91,9 @@ def generate_tests(
 
             if metafunc.definition.name == "test_create_long_values":
                 if query.name not in long_value_queries:
+                    continue
+            elif metafunc.definition.name == "test_create_dictionary":
+                if query.name not in ingest_dictionary_queries:
                     continue
             elif (
                 metafunc.definition.name != "test_create"
@@ -229,6 +233,52 @@ class TestIngest:
         # metadata
         result = _sort_table_by_first_column(result)
         expected = _sort_table_by_first_column(subquery.expected())
+        compare.compare_tables(expected, result, query.metadata())
+        subschema = pyarrow.schema(list(result.schema)[1:])
+        utils.assert_field_type_name(driver, "query", query, subschema)
+
+    def test_create_dictionary(
+        self,
+        driver: model.DriverQuirks,
+        conn: adbc_driver_manager.dbapi.Connection,
+        query: Query,
+    ) -> None:
+        """Ingest an existing case with its value column dictionary-encoded."""
+        subquery = query.query
+        assert isinstance(subquery, model.IngestQuery)
+
+        table_name = make_table_name("test_ingest_create_dictionary", query)
+        plain = subquery.input()
+        # Repeat the fixture to exercise repeated dictionary indices, including
+        # nulls when present, while retaining driver-specific fixture overrides.
+        data = pyarrow.concat_tables([plain, plain]).combine_chunks()
+        values = data.column(1).dictionary_encode()
+        # Keep the row-number column plain so string cases only test string
+        # dictionaries, without also requiring support for integer dictionaries.
+        data = data.set_column(1, data.schema.field(1).with_type(values.type), values)
+
+        with conn.cursor() as cursor:
+            driver.try_drop_table(cursor, table_name=table_name)
+            with driver.setup_statement(query, cursor):
+                modified = cursor.adbc_ingest(table_name, data, mode="create")
+                if driver.features.statement_rows_affected:
+                    assert modified == len(data)
+                else:
+                    assert modified == -1
+
+        fields = [driver.quote_identifier(field.name) for field in data.schema]
+        select = (
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        )
+        with conn.cursor() as cursor:
+            with driver.setup_statement(query, cursor):
+                result = execute_query_without_prepare(cursor, select)
+
+        expected = subquery.expected()
+        expected = _sort_table_by_first_column(
+            pyarrow.concat_tables([expected, expected])
+        )
+        result = _sort_table_by_first_column(result)
         compare.compare_tables(expected, result, query.metadata())
         subschema = pyarrow.schema(list(result.schema)[1:])
         utils.assert_field_type_name(driver, "query", query, subschema)
