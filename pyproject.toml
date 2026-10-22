@@ -24,9 +24,9 @@ dependencies = [
   "jinja2>=3.1.6,<4",
   "plpygis>=0.6.1,<0.7",
   "pyarrow>=26.0.0,<27",
-  "pydantic>=2.14.0,<3",
+  "pydantic>=2.14.1,<3",
   "pytest>=9.1.1,<10",
-  "sqlglot>=30.21.0",
+  "sqlglot>=30.23.0",
   "whenever>=0.11.0,<0.12",
 ]
 
@@ -36,8 +36,8 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.16.10",
-    "ty>=0.0.85",
+    "ruff>=0.17.1",
+    "ty>=0.0.88",
 ]
 
 [tool.ruff.lint]
