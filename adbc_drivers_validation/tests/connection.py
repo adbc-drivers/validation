@@ -846,18 +846,26 @@ class TestConnection:
             else:
                 # Fall back to CREATE TABLE + INSERT
                 quoted = driver.quote_identifier(table_name)
-                cursor.execute(
-                    f"CREATE TABLE {quoted} (id INT, name VARCHAR(100), value REAL)"
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.create_table",
+                    f"CREATE TABLE {quoted} (id INT, name VARCHAR(100), value REAL)",
                 )
-                cursor.execute(
-                    f"INSERT INTO {quoted} (id, name, value) VALUES (1, 'foo', 1.5)"
+                cursor.execute(query)
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.insert_1",
+                    f"INSERT INTO {quoted} (id, name, value) VALUES (1, 'foo', 1.5)",
                 )
-                cursor.execute(
-                    f"INSERT INTO {quoted} (id, name, value) VALUES (2, 'bar', 2.5)"
+                cursor.execute(query)
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.insert_2",
+                    f"INSERT INTO {quoted} (id, name, value) VALUES (2, 'bar', 2.5)",
                 )
-                cursor.execute(
-                    f"INSERT INTO {quoted} (id, name, value) VALUES (3, NULL, 3.5)"
+                cursor.execute(query)
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.insert_3",
+                    f"INSERT INTO {quoted} (id, name, value) VALUES (3, NULL, 3.5)",
                 )
+                cursor.execute(query)
 
         table_id = (
             driver.features.current_catalog,

@@ -116,9 +116,11 @@ class TestStatement:
         # cover that
         parameters = pyarrow.RecordBatch.from_pydict({"0": [1, 2, 3, 4]})
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(
-                f"SELECT 1 + {driver.bind_parameter(1)}"
+            query = driver.query_override(
+                "TestStatement.test_parameter_execute",
+                f"SELECT 1 + {driver.bind_parameter(1)}",
             )
+            cursor.adbc_statement.set_sql_query(query)
             cursor.adbc_statement.bind(parameters)
             cursor.adbc_statement.prepare()
             handle, _ = cursor.adbc_statement.execute_query()
@@ -141,10 +143,12 @@ class TestStatement:
             }
         )
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(
+            query = driver.query_override(
+                "TestStatement.test_parameter_null_typed.insert",
                 f"INSERT INTO {sample_table} ({id_}, {value}) "
-                f"VALUES ({driver.bind_parameter(1)}, {driver.bind_parameter(2)})"
+                f"VALUES ({driver.bind_parameter(1)}, {driver.bind_parameter(2)})",
             )
+            cursor.adbc_statement.set_sql_query(query)
             cursor.adbc_statement.prepare()
             cursor.adbc_statement.bind(parameters)
             cursor.adbc_statement.execute_update()
@@ -176,7 +180,7 @@ class TestStatement:
         with conn.cursor() as cursor:
             query = driver.query_override(
                 "TestStatement.test_parameter_schema::2",
-                f"SELECT 1 + {driver.bind_parameter(1)}+ {driver.bind_parameter(2)}",
+                f"SELECT 1 + {driver.bind_parameter(1)} + {driver.bind_parameter(2)}",
             )
             cursor.adbc_statement.set_sql_query(query)
             cursor.adbc_statement.prepare()
@@ -188,7 +192,8 @@ class TestStatement:
         self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
     ) -> None:
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query("SELECT 1")
+            query = driver.query_override("TestStatement.test_prepare", "SELECT 1")
+            cursor.adbc_statement.set_sql_query(query)
             cursor.adbc_statement.prepare()
 
     def test_transaction_toggle(
@@ -211,7 +216,10 @@ class TestStatement:
         assert conn.adbc_connection.get_option("adbc.connection.autocommit") == "false"
 
         with conn.cursor() as cursor:
-            cursor.execute("SELECT 1")
+            query = driver.query_override(
+                "TestStatement.test_transaction_toggle", "SELECT 1"
+            )
+            cursor.execute(query)
             cursor.fetchall()
 
         conn.adbc_connection.rollback()

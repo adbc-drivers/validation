@@ -222,8 +222,9 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = (
-            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_create",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}",
         )
         with conn.cursor() as cursor:
             with driver.setup_statement(query, cursor):
@@ -267,8 +268,9 @@ class TestIngest:
                     assert modified == -1
 
         fields = [driver.quote_identifier(field.name) for field in data.schema]
-        select = (
-            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_create_dictionary",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}",
         )
         with conn.cursor() as cursor:
             with driver.setup_statement(query, cursor):
@@ -319,7 +321,10 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_append",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}",
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -396,7 +401,10 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_createappend",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}",
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -538,7 +546,10 @@ class TestIngest:
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
         # The final replacement contains one row, so ordering is unnecessary.
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_replace",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}",
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -568,7 +579,10 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_replace_noop",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)}",
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -676,8 +690,9 @@ class TestIngest:
                     temp_table = driver.quote_identifier(
                         *driver.qualify_temp_table(cursor, table_name)
                     )
-                    select_temporary = (
-                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
+                    select_temporary = driver.query_override(
+                        "TestIngest.test_temporary.select_temporary",
+                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC",
                     )
                     result_temporary = execute_query_without_prepare(
                         cursor, select_temporary
@@ -689,8 +704,9 @@ class TestIngest:
                     temp_table = driver.quote_identifier(
                         *driver.qualify_temp_table(cursor, table_name)
                     )
-                    select_temporary = (
-                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
+                    select_temporary = driver.query_override(
+                        "TestIngest.test_temporary.select_temporary",
+                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC",
                     )
                     with pytest.raises(Exception) as excinfo:
                         execute_query_without_prepare(cursor, select_temporary)
@@ -712,11 +728,13 @@ class TestIngest:
                     temp_table = driver.quote_identifier(
                         *driver.qualify_temp_table(cursor, table_name)
                     )
-                    select_normal = (
-                        f"SELECT {idx}, {value} FROM {normal_table} ORDER BY {idx} ASC"
+                    select_normal = driver.query_override(
+                        "TestIngest.test_temporary.select_normal",
+                        f"SELECT {idx}, {value} FROM {normal_table} ORDER BY {idx} ASC",
                     )
-                    select_temporary = (
-                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC"
+                    select_temporary = driver.query_override(
+                        "TestIngest.test_temporary.select_temporary",
+                        f"SELECT {idx}, {value} FROM {temp_table} ORDER BY {idx} ASC",
                     )
 
                     result_normal = execute_query_without_prepare(cursor, select_normal)
@@ -807,7 +825,10 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {idx} ASC"
+        select = driver.query_override(
+            "TestIngest.test_schema",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {idx} ASC",
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -845,7 +866,10 @@ class TestIngest:
 
         idx = driver.quote_identifier("idx")
         value = driver.quote_identifier("value")
-        select = f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC"
+        select = driver.query_override(
+            "TestIngest.test_catalog",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC",
+        )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
 
@@ -874,8 +898,14 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select_default = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC"
-        select_secondary = f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {fields[0]} ASC"
+        select_default = driver.query_override(
+            "TestIngest.test_replace_schema.select_default",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)} ORDER BY {fields[0]} ASC",
+        )
+        select_secondary = driver.query_override(
+            "TestIngest.test_replace_schema.select_secondary",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(schema_name, table_name)} ORDER BY {fields[0]} ASC",
+        )
 
         with conn.cursor() as cursor:
             # Create table in default schema
@@ -988,14 +1018,20 @@ class TestIngest:
         value = driver.quote_identifier("value")
 
         # Verify secondary catalog table has the replaced data
-        select_secondary = f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC"
+        select_secondary = driver.query_override(
+            "TestIngest.test_replace_catalog.select_secondary",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(catalog_name, schema_name, table_name)} ORDER BY {idx} ASC",
+        )
         with conn.cursor() as cursor:
             result_secondary = execute_query_without_prepare(cursor, select_secondary)
         expected_secondary = expected.slice(0, 1)
         compare.compare_tables(expected_secondary, result_secondary)
 
         # Verify default catalog/schema table is unchanged
-        select_default = f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC"
+        select_default = driver.query_override(
+            "TestIngest.test_replace_catalog.select_default",
+            f"SELECT {idx}, {value} FROM {driver.quote_identifier(table_name)} ORDER BY {idx} ASC",
+        )
         with conn.cursor() as cursor:
             result_default = execute_query_without_prepare(cursor, select_default)
         compare.compare_tables(expected, result_default)
@@ -1044,8 +1080,9 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = (
-            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_create_multiple_batches",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}",
         )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
@@ -1111,8 +1148,9 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = (
-            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_create_large_batch",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}",
         )
         with conn.cursor() as cursor:
             result = execute_query_without_prepare(cursor, select)
@@ -1164,8 +1202,9 @@ class TestIngest:
                 assert modified == -1
 
         fields = [driver.quote_identifier(field.name) for field in data.schema]
-        select = (
-            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_create_long_values",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}",
         )
         with conn.cursor() as cursor:
             with (
@@ -1253,8 +1292,9 @@ class TestIngest:
         fields = []
         for field in data.schema:
             fields.append(driver.quote_identifier(field.name))
-        select = (
-            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}"
+        select = driver.query_override(
+            "TestIngest.test_ingest_then_query",
+            f"SELECT {', '.join(fields)} FROM {driver.quote_identifier(table_name)}",
         )
 
         with conn.cursor() as cursor:
