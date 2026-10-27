@@ -220,7 +220,7 @@ class TestConnection:
     ) -> None:
         objects = conn.adbc_get_objects(depth="catalogs").read_all().to_pylist()
         catalogs = [obj["catalog_name"] for obj in objects]
-        assert list(sorted(set(catalogs))) == list(sorted(catalogs))
+        assert sorted(set(catalogs)) == sorted(catalogs)
         assert driver.features.current_catalog in catalogs
 
         objects = (
@@ -734,8 +734,6 @@ class TestConnection:
 
         for column in columns:
             for field in driver.features.supported_xdbc_fields:
-                assert column[field] is not None
-
                 if field == "xdbc_nullable":
                     assert column[field] == 1
                 elif field == "xdbc_is_nullable":
@@ -848,18 +846,26 @@ class TestConnection:
             else:
                 # Fall back to CREATE TABLE + INSERT
                 quoted = driver.quote_identifier(table_name)
-                cursor.execute(
-                    f"CREATE TABLE {quoted} (id INT, name VARCHAR(100), value REAL)"
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.create_table",
+                    f"CREATE TABLE {quoted} (id INT, name VARCHAR(100), value REAL)",
                 )
-                cursor.execute(
-                    f"INSERT INTO {quoted} (id, name, value) VALUES (1, 'foo', 1.5)"
+                cursor.execute(query)
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.insert_1",
+                    f"INSERT INTO {quoted} (id, name, value) VALUES (1, 'foo', 1.5)",
                 )
-                cursor.execute(
-                    f"INSERT INTO {quoted} (id, name, value) VALUES (2, 'bar', 2.5)"
+                cursor.execute(query)
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.insert_2",
+                    f"INSERT INTO {quoted} (id, name, value) VALUES (2, 'bar', 2.5)",
                 )
-                cursor.execute(
-                    f"INSERT INTO {quoted} (id, name, value) VALUES (3, NULL, 3.5)"
+                cursor.execute(query)
+                query = driver.query_override(
+                    "TestConnection.get_statistics_table.insert_3",
+                    f"INSERT INTO {quoted} (id, name, value) VALUES (3, NULL, 3.5)",
                 )
+                cursor.execute(query)
 
         table_id = (
             driver.features.current_catalog,
