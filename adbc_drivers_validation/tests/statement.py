@@ -163,18 +163,22 @@ class TestStatement:
         self, driver: model.DriverQuirks, conn: adbc_driver_manager.dbapi.Connection
     ) -> None:
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(
-                f"SELECT 1 + {driver.bind_parameter(1)}"
+            query = driver.query_override(
+                "TestStatement.test_parameter_schema::1",
+                f"SELECT 1 + {driver.bind_parameter(1)}",
             )
+            cursor.adbc_statement.set_sql_query(query)
             cursor.adbc_statement.prepare()
             handle = cursor.adbc_statement.get_parameter_schema()
             schema = pyarrow.Schema._import_from_c(handle.address)
             assert len(schema) == 1
 
         with conn.cursor() as cursor:
-            cursor.adbc_statement.set_sql_query(
-                f"SELECT 1 + {driver.bind_parameter(1)}+ {driver.bind_parameter(2)}"
+            query = driver.query_override(
+                "TestStatement.test_parameter_schema::2",
+                f"SELECT 1 + {driver.bind_parameter(1)}+ {driver.bind_parameter(2)}",
             )
+            cursor.adbc_statement.set_sql_query(query)
             cursor.adbc_statement.prepare()
             handle = cursor.adbc_statement.get_parameter_schema()
             schema = pyarrow.Schema._import_from_c(handle.address)

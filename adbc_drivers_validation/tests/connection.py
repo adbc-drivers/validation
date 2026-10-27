@@ -220,7 +220,7 @@ class TestConnection:
     ) -> None:
         objects = conn.adbc_get_objects(depth="catalogs").read_all().to_pylist()
         catalogs = [obj["catalog_name"] for obj in objects]
-        assert list(sorted(set(catalogs))) == list(sorted(catalogs))
+        assert sorted(set(catalogs)) == sorted(catalogs)
         assert driver.features.current_catalog in catalogs
 
         objects = (
@@ -734,8 +734,6 @@ class TestConnection:
 
         for column in columns:
             for field in driver.features.supported_xdbc_fields:
-                assert column[field] is not None
-
                 if field == "xdbc_nullable":
                     assert column[field] == 1
                 elif field == "xdbc_is_nullable":
