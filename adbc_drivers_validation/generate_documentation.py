@@ -353,6 +353,12 @@ def render_part(template: jinja2.Template, kwargs: dict[str, typing.Any]) -> str
     return rendered
 
 
+def _query(query: str) -> duckdb.DuckDBPyRelation:
+    result = duckdb.sql(query)
+    assert result is not None
+    return result
+
+
 def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
     """Load test case data into DuckDB."""
     report = xml.etree.ElementTree.parse(results_path).getroot()
@@ -444,7 +450,7 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
     duckdb.register(
         "testcases_raw", pyarrow.Table.from_pylist(testcases, schema=schema)
     )
-    duckdb.sql(
+    duckdb.execute(
         """
         CREATE TABLE IF NOT EXISTS testcases (
               test_module STRING,
@@ -470,7 +476,7 @@ def load_testcases(get_quirks: GetQuirks, results_path: Path) -> None:
           CAST(metadata AS JSON) AS properties,
         FROM testcases_raw
         """
-    )
+    ).complete()
 
 
 def render(
@@ -810,7 +816,7 @@ def render(
         )
 
     duckdb.register("features", pyarrow.Table.from_pylist(rows))
-    duckdb.sql(
+    duckdb.execute(
         """
         CREATE VIEW features_agg AS
         FROM features
@@ -827,8 +833,8 @@ def render(
         GROUP BY feature, subfeature, suborder, vendor
         ORDER BY feature, suborder
         """
-    )
-    raw_features = duckdb.sql(
+    ).complete()
+    raw_features = _query(
         """
         PIVOT features_agg
         ON vendor
@@ -964,7 +970,7 @@ def render(
 def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
     # Handle different vendors, multiple versions
     versions = {}
-    for row in duckdb.sql(
+    for row in _query(
         "FROM testcases SELECT DISTINCT vendor, vendor_version"
     ).fetchall():
         vendor = row[0]
@@ -979,7 +985,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # Version
     version = (
-        duckdb.sql("""
+        _query("""
     FROM testcases
     SELECT
       vendor,
@@ -989,8 +995,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
       properties->>'vendor_version' AS full_version,
     WHERE test_name = 'test_get_info'
     """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     if version:
@@ -1015,7 +1020,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # Select type support
     type_tests = (
-        duckdb.sql("""
+        _query("""
         FROM testcases
         SELECT
           vendor,
@@ -1031,8 +1036,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
         GROUP BY vendor, vendor_version, metadata->>'tags'->>'sql-type-name'
         ORDER BY vendor, vendor_version, metadata->>'tags'->>'sql-type-name'
         """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     for test_case in type_tests:
@@ -1076,7 +1080,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # Bind type support
     type_tests = (
-        duckdb.sql("""
+        _query("""
         FROM testcases
         SELECT
           vendor,
@@ -1093,8 +1097,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
         GROUP BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'sql-type-name'
         ORDER BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'sql-type-name'
         """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     for test_case in type_tests:
@@ -1117,7 +1120,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # Ingest type support
     type_tests = (
-        duckdb.sql("""
+        _query("""
         FROM testcases
         SELECT
           vendor,
@@ -1134,8 +1137,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
         GROUP BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'variant'
         ORDER BY vendor, vendor_version, arrow_type_name, metadata->>'tags'->>'variant'
         """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     for test_case in type_tests:
@@ -1161,7 +1163,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # GetObjects
     get_objects = (
-        duckdb.sql("""
+        _query("""
     WITH get_objects_cases AS (
       FROM testcases
       SELECT
@@ -1175,8 +1177,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
     SELECT vendor, vendor_version, test_name, BOOL_AND(test_result = 'passed') AS supported
     GROUP BY vendor, vendor_version, test_name
     """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     for test_case in get_objects:
@@ -1186,14 +1187,13 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # Get table schema
     get_table_schema = (
-        duckdb.sql("""
+        _query("""
     FROM testcases
     SELECT vendor, vendor_version, CAST(COUNTIF(test_result = 'passed') AS BIGINT) AS supported_cases, COUNT() AS total_cases
     WHERE test_name = 'test_get_table_schema' AND test_result != 'skipped'
     GROUP BY vendor, vendor_version, test_name
     """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     for test_case in get_table_schema:
@@ -1203,7 +1203,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # Ingest modes
     ingest_types = (
-        duckdb.sql("""
+        _query("""
     WITH ingest_cases AS (
       FROM testcases
       SELECT
@@ -1217,8 +1217,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
     SELECT vendor, vendor_version, test_name, BOOL_OR(test_result = 'passed') AS supported
     GROUP BY vendor, vendor_version, test_name
     """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     for test_case in ingest_types:
@@ -1228,7 +1227,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
 
     # Custom features
     custom_features = (
-        duckdb.sql("""
+        _query("""
         FROM testcases
         SELECT
           vendor,
@@ -1251,8 +1250,7 @@ def generate_includes(driver: str, get_quirks: GetQuirks) -> ValidationReport:
           properties->>'feature:group',
           properties->>'feature:name'
         """)
-        .arrow()
-        .read_all()
+        .to_arrow_table()
         .to_pylist()
     )
     for test_case in custom_features:
