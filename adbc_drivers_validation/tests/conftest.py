@@ -175,7 +175,7 @@ def conn_factory(
         ) -> adbc_driver_manager.dbapi.Cursor:
             return make_cursor(adbc_stmt_kwargs=stmt_kwargs)
 
-        conn.cursor = _cursor  # type: ignore[ty:invalid-assignment]
+        conn.cursor = _cursor
         return conn
 
     return _factory
