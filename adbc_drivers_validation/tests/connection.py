@@ -135,14 +135,14 @@ class TestConnection:
             or conn.adbc_current_db_schema == driver.features.current_schema
         )
 
+    @pytest.mark.requires_features(
+        ["connection_set_current_catalog", "secondary_catalog"]
+    )
     def test_set_current_catalog(
         self,
         driver: model.DriverQuirks,
         conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
     ) -> None:
-        if not driver.features.connection_set_current_catalog:
-            pytest.skip("not implemented")
-
         with conn_factory() as conn:
             assert conn.adbc_current_catalog == driver.features.current_catalog
             conn.adbc_current_catalog = driver.features.secondary_catalog  # type: ignore[ty:invalid-assignment]
@@ -157,14 +157,14 @@ class TestConnection:
                 == adbc_driver_manager.AdbcStatusCode.NOT_FOUND
             )
 
+    @pytest.mark.requires_features(
+        ["connection_set_current_schema", "secondary_schema"]
+    )
     def test_set_current_schema(
         self,
         driver: model.DriverQuirks,
         conn_factory: typing.Callable[[], adbc_driver_manager.dbapi.Connection],
     ) -> None:
-        if not driver.features.connection_set_current_schema:
-            pytest.skip("not implemented")
-
         with conn_factory() as conn:
             assert conn.adbc_current_db_schema == driver.features.current_schema
             conn.adbc_current_db_schema = driver.features.secondary_schema  # type: ignore[ty:invalid-assignment]
