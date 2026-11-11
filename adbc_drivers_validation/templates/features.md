@@ -14,40 +14,60 @@
   limitations under the License.
 #}
 <table class="docutils data align-default" style="width: 100%">
-  <colgroup>
-    <col span="1" style="width: 25%;">
-    <col span="1" style="width: 25%;">
+<colgroup>
+<col span="1" style="width: 25%;">
+<col span="1" style="width: 25%;">
 {% for vendor in vendors %}
-    <col span="1" style="width: {{ 50 / len(vendors) }}%;">
+<col span="1" style="width: {{ 50 / len(vendors) }}%;">
 {% endfor %}
-  </colgroup>
-  <thead>
-    <tr>
-      <th colspan="2">Feature</th>
+</colgroup>
+<thead>
+<tr>
+<th colspan="2">Feature</th>
 {% for vendor in vendors %}
-      <th style="text-align: center;">{{ vendor }}</th>
+<th style="text-align: center;">{{ vendor }}</th>
 {% endfor %}
-    </tr>
-  </thead>
-  <tbody>
+</tr>
+</thead>
+<tbody>
 {% for feature in features %}
 {% for subfeature in feature["subfeatures"] %}
-    <tr>
+<tr>
 {% if loop.index == 1 and len(feature["subfeatures"]) > 1 %}
-      <td rowspan="{{ len(feature["subfeatures"]) }}">{{ feature["feature"] }}</td>
+<td rowspan="{{ len(feature["subfeatures"]) }}">
+
+{{ feature["feature"] }}
+
+</td>
 {% elif loop.index == 1 and subfeature["subfeature"] == "" %}
-      <td colspan="2">{{ feature["feature"] }}</td>
+<td colspan="2">
+
+{{ feature["feature"] }}
+
+</td>
 {% elif loop.index == 1 %}
-      <td>{{ feature["feature"] }}</td>
+<td>
+
+{{ feature["feature"] }}
+
+</td>
 {% endif %}
 {% if subfeature["subfeature"] != "" %}
-      <td>{{ subfeature["subfeature"]}}</td>
+<td>
+
+{{ subfeature["subfeature"] }}
+
+</td>
 {% endif %}
 {% for span in subfeature["support"] %}
-      <td colspan="{{ span[0] }}" style="text-align: center;">{{ span[1] }}</td>
+<td colspan="{{ span[0] }}" style="text-align: center;">
+
+{{ span[1] }}
+
+</td>
 {% endfor %}
-    </tr>
+</tr>
 {% endfor %}
 {% endfor %}
-  </tbody>
+</tbody>
 </table>
