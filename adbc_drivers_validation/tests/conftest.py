@@ -79,17 +79,17 @@ def pytest_collection_modifyitems(
     # more than once per query; this saves execution time for vendors with
     # expensive DDL operations
     def _sort_key(item: pytest.Item) -> tuple[str, str, str, str]:
-        module = item.module.__name__  # type: ignore[ty:unresolved-attribute]
+        module = item.module.__name__  # type: ignore[ty:missing-attribute]
         name = item.name
         query_name = ""
         variant = ""
         if (
             hasattr(item, "callspec")
-            and "query" in item.callspec.params  # type: ignore[ty:unresolved-attribute]
-            and "query_setup" in item.fixturenames  # type: ignore[ty:unresolved-attribute]
+            and "query" in item.callspec.params  # type: ignore[ty:missing-attribute]
+            and "query_setup" in item.fixturenames  # type: ignore[ty:missing-attribute]
         ):
             # group query_setup tests by query, so they can reuse the same state
-            query: model.Query = item.callspec.params["query"]  # type: ignore[ty:unresolved-attribute]
+            query: model.Query = item.callspec.params["query"]  # type: ignore[ty:missing-attribute]
             query_name = query.name
             variant = query.metadata().tags.variant or ""
         return (module, variant, query_name, name)

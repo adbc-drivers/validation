@@ -324,7 +324,7 @@ def field_extension_name(field: pyarrow.Field) -> str | None:
 
 def sort_by(table: pyarrow.Table, sort_keys: list[tuple[str, str]]) -> pyarrow.Table:
     """Sort a table, supporting view types."""
-    indices = pyarrow.compute.sort_indices(table, sort_keys=sort_keys)  # type: ignore[ty:unresolved-attribute]
+    indices = pyarrow.compute.sort_indices(table, sort_keys=sort_keys)  # type: ignore[ty:missing-attribute]
     return take(table, indices)
 
 
