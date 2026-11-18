@@ -586,6 +586,9 @@ def render(
                 type_bind_ingest_column_widths.append(
                     col_width / len(column_order[vendor])
                 )
+    elif not vendor_order:
+        # No bind or ingest results: only the type name column
+        type_bind_ingest_column_widths = [100]
     else:
         # Always make the first column (the type name) smaller
         total_cols = len(vendor_order)

@@ -12,9 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
+
 import pytest
 
-from adbc_drivers_validation.generate_documentation import TypeTableEntry
+from adbc_drivers_validation import model
+from adbc_drivers_validation.generate_documentation import (
+    DriverTypeTable,
+    TypeTableEntry,
+    ValidationReport,
+    VendorVersion,
+    render,
+)
 
 
 def test_type_table_entry() -> None:
@@ -55,3 +64,43 @@ def test_type_table_entry() -> None:
 
     with pytest.raises(ValueError, match="None and Variant"):
         entry1.merge(entry9)
+
+
+class _NoBindNoIngestQuirks(model.DriverQuirks):
+    name = "nobind"
+    driver = "adbc_driver_nobind"
+    driver_name = "No Bind Driver"
+    vendor_name = "No Bind"
+    vendor_version = "1"
+    short_version = "1"
+    features = model.DriverFeatures()
+    setup = model.DriverSetup()
+
+    @property
+    def queries_paths(self) -> tuple[Path]:
+        return (Path(__file__).parent,)
+
+    def is_table_not_found(self, table_name: str | None, error: Exception) -> bool:
+        return False
+
+
+def test_render_without_bind_or_ingest_results(tmp_path: Path) -> None:
+    quirks = _NoBindNoIngestQuirks()
+    report = ValidationReport(
+        driver="nobind",
+        versions={
+            VendorVersion("nobind", "1"): DriverTypeTable(
+                quirks=quirks,
+                features=quirks.features,
+                type_select=[TypeTableEntry("INT", ("int32",), "passed", (), None)],
+            )
+        },
+    )
+    template = tmp_path / "nobind.md"
+    template.write_text("{{ types|safe }}\n")
+
+    render(report, [("nobind", "No Bind")], template, tmp_path)
+
+    rendered = (tmp_path / "nobind.md").read_text()
+    assert "Arrow to Database" in rendered
+    assert "int32" in rendered
