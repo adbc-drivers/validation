@@ -17,6 +17,7 @@ import typing
 import pyarrow
 import pytest
 
+import adbc_drivers_validation.arrowjson as arrowjson
 import adbc_drivers_validation.compare as compare
 import adbc_drivers_validation.variant as variant
 
@@ -314,3 +315,18 @@ def test_dictionary_encodings() -> None:
     different = pyarrow.DictionaryArray.from_arrays(indices, ["red", "green"])
     with pytest.raises(AssertionError, match="Tables do not match"):
         compare.compare_tables(expected, pyarrow.table({"color": different}))
+
+
+@pytest.mark.parametrize("mode", ["dense", "sparse"])
+def test_union_scalar_to_py_smart(mode: str) -> None:
+    dtype = pyarrow.union(
+        [pyarrow.field("a", pyarrow.int32()), pyarrow.field("b", pyarrow.int32())],
+        mode,
+        type_codes=[5, 2],
+    )
+    array = arrowjson.array_from_values(
+        [{"type_code": 2, "value": 42}, {"type_code": 2, "value": None}],
+        pyarrow.field("u", dtype),
+    )
+    assert compare.scalar_to_py_smart(array[0]) == {"type_code": 2, "value": 42}
+    assert compare.scalar_to_py_smart(array[1]) is None
