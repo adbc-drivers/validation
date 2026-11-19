@@ -122,6 +122,40 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
             f"Field '{field.name}' is not nullable but contains None values"
         )
 
+    if pyarrow.types.is_dictionary(field.type):
+        # We don't encode the particulars of dictionary slots into JSON
+        # files. Instead the values are the decoded values
+        value_field = pyarrow.field(
+            field.name, field.type.value_type, field.nullable, field.metadata
+        )
+        decoded = array_from_values(values, value_field)
+        try:
+            encoded = decoded.dictionary_encode()
+            indices = encoded.indices.cast(field.type.index_type)
+            dictionary = encoded.dictionary
+        except pyarrow.ArrowNotImplementedError:
+            # XXX: nested types lack a dictionary_encode kernel, hack around
+            # it (thanks Astra)
+            entries = []
+            positions = []
+            for i, scalar in enumerate(decoded):
+                if not scalar.is_valid:
+                    positions.append(None)
+                    continue
+                for position, entry in enumerate(entries):
+                    # XXX: quadratic algorithm
+                    if scalar.equals(decoded[entry]):
+                        break
+                else:
+                    position = len(entries)
+                    entries.append(i)
+                positions.append(position)
+            indices = pyarrow.array(positions, type=field.type.index_type)
+            dictionary = decoded.take(pyarrow.array(entries, type=pyarrow.int64()))
+        return pyarrow.DictionaryArray.from_arrays(
+            indices, dictionary, ordered=field.type.ordered
+        )
+
     if (
         pyarrow.types.is_binary(field.type)
         or pyarrow.types.is_large_binary(field.type)
@@ -277,6 +311,19 @@ def field_from_dict(source: dict) -> pyarrow.Field:
         child_fields = [field_from_dict(child) for child in children]
 
     data_type = parse_type_format(type_format, child_fields)
+    if "dictionary" in source:
+        spec = source["dictionary"]
+        if (
+            not isinstance(spec, dict)
+            or spec.get("indexType") not in tuple("cCsSiIlL")
+            or not isinstance(spec.get("isOrdered"), bool)
+        ):
+            raise ValueError(
+                f"Invalid dictionary declaration for field {name!r}: {spec!r}"
+            )
+        data_type = pyarrow.dictionary(
+            parse_type_format(spec["indexType"]), data_type, ordered=spec["isOrdered"]
+        )
     nullable = "nullable" in flags
 
     # Note that we treat extension types as regular types with metadata and

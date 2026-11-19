@@ -302,3 +302,15 @@ def test_compare_variant_sql_null_differs_from_variant_null() -> None:
 def test_variant_truncated_fixed_size_values_raise_value_error(encoded: bytes) -> None:
     with pytest.raises(ValueError, match="truncated"):
         variant.parse_variant(b"\x01\x00\x00", encoded)
+
+
+def test_dictionary_encodings() -> None:
+    expected_array = pyarrow.DictionaryArray.from_arrays([0, None, 0], ["blue"])
+    expected = pyarrow.table({"color": expected_array})
+    indices = pyarrow.array([1, None, 1])
+    equivalent = pyarrow.DictionaryArray.from_arrays(indices, ["red", "blue"])
+    compare.compare_tables(expected, pyarrow.table({"color": equivalent}))
+
+    different = pyarrow.DictionaryArray.from_arrays(indices, ["red", "green"])
+    with pytest.raises(AssertionError, match="Tables do not match"):
+        compare.compare_tables(expected, pyarrow.table({"color": different}))

@@ -422,3 +422,36 @@ def test_parse_type_format_decimal() -> None:
     # Test invalid format (too few parameters)
     with pytest.raises(ValueError, match="Invalid decimal format: d:10"):
         arrowjson.parse_type_format("d:10")
+
+
+@pytest.mark.parametrize(
+    "specifier,value_type,values",
+    [
+        pytest.param(
+            {"format": "u"}, pyarrow.string(), ["blue", None, "blue"], id="string"
+        ),
+        pytest.param({"format": "i"}, pyarrow.int32(), [42, None, 42], id="int"),
+        pytest.param(
+            {
+                "format": "+l",
+                "children": [{"name": "item", "format": "i", "flags": ["nullable"]}],
+            },
+            pyarrow.list_(pyarrow.int32()),
+            [[1, 2], None, [], [1, 2]],
+            id="list",
+        ),
+    ],
+)
+def test_dictionary_from_values(
+    specifier: dict, value_type: pyarrow.DataType, values: list
+) -> None:
+    field = arrowjson.field_from_dict(
+        {
+            **specifier,
+            "flags": ["nullable"],
+            "dictionary": {"indexType": "s", "isOrdered": True},
+        }
+    )
+    result = arrowjson.array_from_values(values, field)
+    assert result.type == pyarrow.dictionary(pyarrow.int16(), value_type, ordered=True)
+    assert result.to_pylist() == values
