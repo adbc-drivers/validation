@@ -14,6 +14,7 @@
   limitations under the License.
 -->
 
-# TxtCase TextMate Grammar
+# TxtCase Syntax Highlighting Grammars
 
-Barebones TextMate grammar for TxtCase.
+Barebones TextMate and Sublime Text grammars for TxtCase. Use with your text
+editor, IDE, or tools like [`bat`](https://github.com/sharkdp/bat).
