@@ -74,6 +74,12 @@ def placeholder_value_for_type(data_type: pyarrow.DataType) -> typing.Any:
         return []
     elif pyarrow.types.is_map(data_type):
         return []
+    elif pyarrow.types.is_union(data_type):
+        child = data_type.field(0)
+        return {
+            "type_code": data_type.type_codes[0],
+            "value": None if child.nullable else placeholder_value_for_type(child.type),
+        }
     elif pyarrow.types.is_struct(data_type):
         return {
             field.name: placeholder_value_for_type(field.type)
@@ -120,6 +126,47 @@ def array_from_values(values: list, field: pyarrow.Field) -> pyarrow.Array:
     if not field.nullable and any(value is None for value in values):
         raise ValueError(
             f"Field '{field.name}' is not nullable but contains None values"
+        )
+
+    if pyarrow.types.is_union(field.type):
+        children = list(field.type)
+        positions = {code: i for i, code in enumerate(field.type.type_codes)}
+        child_values: list[list] = [[] for _ in children]
+        codes = []
+        offsets = []
+        dense = field.type.mode == "dense"
+        for value in values:
+            if not isinstance(value, dict) or value.keys() != {"type_code", "value"}:
+                raise ValueError(
+                    f"Expected tagged union value for {field.name!r}: {value!r}"
+                )
+            code = value["type_code"]
+            if type(code) is not int or code not in positions:
+                raise ValueError(f"Unknown union type code: {code!r}")
+            selected = positions[code]
+            codes.append(code)
+            if dense:
+                offsets.append(len(child_values[selected]))
+            else:
+                for i, child in enumerate(children):
+                    if i != selected:
+                        child_values[i].append(
+                            None
+                            if child.nullable
+                            else placeholder_value_for_type(child.type)
+                        )
+            child_values[selected].append(value["value"])
+        buffers = [None, pyarrow.array(codes, type=pyarrow.int8()).buffers()[1]]
+        if dense:
+            buffers.append(pyarrow.array(offsets, type=pyarrow.int32()).buffers()[1])
+        return pyarrow.Array.from_buffers(
+            field.type,
+            len(values),
+            buffers,
+            children=[
+                array_from_values(items, child)
+                for items, child in zip(child_values, children)
+            ],
         )
 
     if pyarrow.types.is_dictionary(field.type):
@@ -325,6 +372,8 @@ def field_from_dict(source: dict) -> pyarrow.Field:
             parse_type_format(spec["indexType"]), data_type, ordered=spec["isOrdered"]
         )
     nullable = "nullable" in flags
+    if nullable and pyarrow.types.is_union(data_type):
+        raise ValueError("Union types cannot be nullable")
 
     # Note that we treat extension types as regular types with metadata and
     # not their "real" type for convenience. This breaks PyArrow since (of
@@ -402,14 +451,12 @@ def parse_type_format(
             key_type, item_type = children
             return pyarrow.map_(key_type, item_type)
 
-        elif type_format.startswith("+ud:") or type_format.startswith("+us:"):  # Union
+        elif type_format.startswith(("+ud:", "+us:")):  # Union
             mode = "dense" if type_format[2] == "d" else "sparse"
-
             type_ids = [int(id_) for id_ in type_format[4:].split(",")]
             if len(type_ids) != len(children):
-                # Default to sequential IDs if mismatch
-                type_ids = list(range(len(children)))
-            return pyarrow.union(children, type_ids, mode)
+                raise ValueError("Union type IDs do not match children")
+            return pyarrow.union(children, mode=mode, type_codes=type_ids)
 
         elif nested_type == "r":  # Run-End Encoded
             if len(children) != 2:

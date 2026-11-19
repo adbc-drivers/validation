@@ -621,7 +621,12 @@ class Query:
             raise ValueError(f"Unknown query type for query `{self.name}`")
 
         for field, column in zip(data.schema, data.columns):
-            assert column.null_count > 0, (
+            if pyarrow.types.is_union(field.type):
+                # Union nulls live in the selected child.
+                has_null = any(not scalar.is_valid for scalar in column)
+            else:
+                has_null = column.null_count > 0
+            assert has_null, (
                 f"Column `{field.name}` ({field.type}) does not test NULL values!"
             )
 

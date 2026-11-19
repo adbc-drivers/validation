@@ -45,6 +45,81 @@ def test_parse_int32_schema() -> None:
     assert parsed_schema.field("res").nullable
 
 
+@pytest.mark.parametrize("prefix, mode", [("+us", "sparse"), ("+ud", "dense")])
+def test_parse_union_schema(prefix: str, mode: str) -> None:
+    parsed_schema = arrowjson.schema_from_dict(
+        {
+            "format": "+s",
+            "children": [
+                {
+                    "name": "res",
+                    "format": f"{prefix}:0,1",
+                    "children": [
+                        {"name": "i", "format": "i", "flags": ["nullable"]},
+                        {"name": "s", "format": "u", "flags": ["nullable"]},
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert len(parsed_schema) == 1
+    assert parsed_schema.names == ["res"]
+    assert parsed_schema.types[0] == pyarrow.union(
+        [
+            pyarrow.field("i", pyarrow.int32(), nullable=True),
+            pyarrow.field("s", pyarrow.string(), nullable=True),
+        ],
+        mode=mode,
+        type_codes=[0, 1],
+    )
+    assert not parsed_schema.field("res").nullable
+
+
+def test_parse_union_schema_invalid() -> None:
+    with pytest.raises(ValueError, match="Union types cannot be nullable"):
+        arrowjson.schema_from_dict(
+            {
+                "format": "+s",
+                "children": [
+                    {
+                        "name": "res",
+                        "format": "+us:0",
+                        "children": [
+                            {
+                                "name": "i",
+                                "format": "i",
+                                "flags": ["nullable"],
+                            },
+                        ],
+                        "flags": ["nullable"],
+                    },
+                ],
+            }
+        )
+
+    with pytest.raises(ValueError, match="Union type IDs do not match children"):
+        arrowjson.schema_from_dict(
+            {
+                "format": "+s",
+                "children": [
+                    {
+                        "name": "res",
+                        "format": "+us:0,1,2",
+                        "children": [
+                            {
+                                "name": "i",
+                                "format": "i",
+                                "flags": ["nullable"],
+                            },
+                        ],
+                        "flags": ["nullable"],
+                    },
+                ],
+            }
+        )
+
+
 def test_parse_extension_schema() -> None:
     f = io.StringIO("""
 {
@@ -455,3 +530,28 @@ def test_dictionary_from_values(
     result = arrowjson.array_from_values(values, field)
     assert result.type == pyarrow.dictionary(pyarrow.int16(), value_type, ordered=True)
     assert result.to_pylist() == values
+
+
+@pytest.mark.parametrize("mode", ["sparse", "dense"])
+def test_union_from_values(mode: str) -> None:
+    field = pyarrow.field(
+        "res",
+        pyarrow.union(
+            [
+                pyarrow.field("i", pyarrow.int64(), nullable=True),
+                pyarrow.field("s", pyarrow.string(), nullable=True),
+            ],
+            mode=mode,
+            type_codes=[5, 2],
+        ),
+    )
+    values = [
+        {"type_code": 5, "value": 64},
+        {"type_code": 5, "value": None},
+        {"type_code": 2, "value": "foobar"},
+        {"type_code": 2, "value": None},
+    ]
+    result = arrowjson.array_from_values(values, field)
+    assert result.type == field.type
+    assert result.to_pylist() == [64, None, "foobar", None]
+    assert result.type_codes.to_pylist() == [5, 5, 2, 2]

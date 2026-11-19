@@ -90,6 +90,12 @@ def scalar_to_py_smart(
 
     if value is None or not value.is_valid:
         return None
+    elif isinstance(value, pyarrow.UnionScalar):
+        child = value.type.field(value.type.type_codes.index(value.type_code))
+        return {
+            "type_code": value.type_code,
+            "value": scalar_to_py_smart(value.value, utils.field_extension_name(child)),
+        }
     elif extension_name == variant.VARIANT_EXTENSION_NAME:
         storage = value.as_py()
         if not isinstance(storage, dict):

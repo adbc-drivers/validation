@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 from pathlib import Path
 
 import pyarrow
@@ -146,4 +147,39 @@ def test_queries_quality(subtests: pytest.Subtests) -> None:
     # overrides), but this helps to catch things early
     for query in model.base_query_set().queries.values():
         with subtests.test(name=query.name):
+            query.lint()
+
+
+@pytest.mark.parametrize("union_format", ["+us:0,1", "+ud:0,1"])
+@pytest.mark.parametrize("integer, string", [(1, None), (None, "x"), (1, "x")])
+def test_union_null_lint(
+    tmp_path: Path, union_format: str, integer: int | None, string: str | None
+) -> None:
+    directory = tmp_path / "type" / "select"
+    directory.mkdir(parents=True)
+    field = {
+        "name": "res",
+        "format": union_format,
+        "children": [
+            {"name": "i", "format": "i", "flags": ["nullable"]},
+            {"name": "s", "format": "u", "flags": ["nullable"]},
+        ],
+    }
+    rows = [
+        json.dumps({"res": {"type_code": code, "value": value}})
+        for code, value in enumerate([integer, string])
+    ]
+    (directory / "union.txtcase").write_text(
+        "// part: metadata\n[tags]\nsql-type-name = 'UNION'\n"
+        "// part: query\nSELECT res FROM t\n"
+        "// part: expected_schema\n"
+        + json.dumps({"format": "+s", "children": [field]})
+        + "\n// part: expected\n"
+        + "\n".join(rows)
+    )
+    query = model.QuerySet.load(tmp_path).queries["type/select/union"]
+    if integer is None or string is None:
+        query.lint()
+    else:
+        with pytest.raises(AssertionError, match="does not test NULL values"):
             query.lint()
