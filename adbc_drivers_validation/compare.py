@@ -329,6 +329,44 @@ def sort_oblivious(table: pyarrow.Table, sort_keys: typing.Any) -> pyarrow.Table
     return pyarrow.Table.from_arrays(cols, schema=table.schema)
 
 
+def _decoded_type(dtype: pyarrow.DataType) -> pyarrow.DataType:
+    """Replace dictionary types with their value type."""
+    if pyarrow.types.is_dictionary(dtype):
+        return _decoded_type(dtype.value_type)
+    elif dtype.num_fields:
+        fields = [dtype.field(i) for i in range(dtype.num_fields)]
+        children = [f.with_type(_decoded_type(f.type)) for f in fields]
+        if children != fields:
+            if pyarrow.types.is_map(dtype):
+                entries = children[0].type
+                return pyarrow.map_(
+                    entries.field(0), entries.field(1), keys_sorted=dtype.keys_sorted
+                )
+            elif pyarrow.types.is_struct(dtype):
+                return pyarrow.struct(children)
+            elif pyarrow.types.is_union(dtype):
+                return pyarrow.union(
+                    children, mode=dtype.mode, type_codes=dtype.type_codes
+                )
+            elif pyarrow.types.is_run_end_encoded(dtype):
+                return pyarrow.run_end_encoded(children[0].type, children[1].type)
+            elif pyarrow.types.is_large_list(dtype):
+                return pyarrow.large_list(children[0])
+            elif pyarrow.types.is_fixed_size_list(dtype):
+                return pyarrow.list_(children[0], dtype.list_size)
+            elif pyarrow.types.is_list_view(dtype):
+                return pyarrow.list_view(children[0])
+            elif pyarrow.types.is_large_list_view(dtype):
+                return pyarrow.large_list_view(children[0])
+            return pyarrow.list_(children[0])
+    return dtype
+
+
+def _decode_table(table: pyarrow.Table) -> pyarrow.Table:
+    schema = pyarrow.schema([f.with_type(_decoded_type(f.type)) for f in table.schema])
+    return table.cast(schema) if schema != table.schema else table
+
+
 def compare_tables(
     expected: pyarrow.Table,
     actual: pyarrow.Table,
@@ -338,11 +376,14 @@ def compare_tables(
     expected = make_nullable(expected)
     actual = make_nullable(actual)
 
+    compare_schemas(expected.schema, actual.schema)
+    expected = _decode_table(expected)
+    actual = _decode_table(actual)
+
     if meta and (sort_keys := meta.sort_keys):
         expected = sort_oblivious(expected, sort_keys)
         actual = sort_oblivious(actual, sort_keys)
 
-    compare_schemas(expected.schema, actual.schema)
     if expected != actual:
         expected_repr = repr(expected.schema).splitlines() + [
             repr(line) for line in to_pylist(expected)
