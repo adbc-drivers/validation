@@ -27,7 +27,8 @@ updates:
     cooldown:
       default-days: 7
 
-  - package-ecosystem: pip
+  - package-ecosystem: uv
+    versioning-strategy: increase
     commit-message:
       prefix: "chore: "
     directory: "/"
