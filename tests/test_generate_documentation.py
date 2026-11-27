@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 from pathlib import Path
 
 import pytest
@@ -104,3 +105,36 @@ def test_render_without_bind_or_ingest_results(tmp_path: Path) -> None:
     rendered = (tmp_path / "nobind.md").read_text()
     assert "Arrow to Database" in rendered
     assert "int32" in rendered
+
+
+def test_broken_vendor_footnotes() -> None:
+    quirks = _NoBindNoIngestQuirks()
+    version = VendorVersion("nobind", "1")
+    table = DriverTypeTable(quirks=quirks, features=quirks.features)
+    report = ValidationReport(driver="nobind", versions={version: table})
+
+    report.add_table_entry(
+        "nobind",
+        "1",
+        "select",
+        "INT",
+        "int32",
+        {
+            "test_results": ["passed", "passed"],
+            "metadata": [
+                json.dumps({"tags": {"broken-vendor": "legacy reason"}}),
+                json.dumps(
+                    {
+                        "tags": {
+                            "broken-vendor": {
+                                "reason": "schema issue",
+                                "tests": ["test_get_table_schema"],
+                            }
+                        }
+                    }
+                ),
+            ],
+        },
+    )
+
+    assert list(report.footnotes.values()) == ["legacy reason", "schema issue"]

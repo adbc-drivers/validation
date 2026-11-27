@@ -587,6 +587,13 @@ class Query:
 
     @property
     def pytest_marks(self) -> list[pytest.MarkDecorator]:
+        """Marks that apply to all eligible tests for this query."""
+        return self.pytest_marks_for_test()
+
+    def pytest_marks_for_test(
+        self, test_name: str | None = None
+    ) -> list[pytest.MarkDecorator]:
+        """Return case-wide marks and marks for the given test name."""
         md = self.metadata()
         marks = []
         if skip := md.skip:
@@ -594,8 +601,14 @@ class Query:
 
         if broken_driver := md.tags.broken_driver:
             marks.append(pytest.mark.xfail(reason=broken_driver))
-        if broken_vendor := md.tags.broken_vendor:
+        broken_vendor = md.tags.broken_vendor
+        if isinstance(broken_vendor, str) and broken_vendor:
             marks.append(pytest.mark.xfail(reason=broken_vendor))
+        elif (
+            isinstance(broken_vendor, query_metadata.BrokenVendor)
+            and test_name in broken_vendor.tests
+        ):
+            marks.append(pytest.mark.xfail(reason=broken_vendor.reason))
         return marks
 
     def lint(self) -> None:

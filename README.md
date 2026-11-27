@@ -56,6 +56,11 @@ All queries have an optional `query.toml` file defining various metadata:
 - `sort-keys` (`list[tuple[str, 'ascending' | 'descending']]`) - if present,
   sort the result set by these columns before comparison
 - `tags` table:
+  - `broken-vendor` (`str` or table) - a reason string marks all eligible
+    tests for the query as expected failures. Use
+    `broken-vendor = { reason = "...", tests = ["test_get_table_schema"] }`
+    to mark only the listed tests. Use exact pytest function names and list
+    at least one test.
   - `caveats` (`list[str]`) - if present, a list of footnotes to add to the
     user documentation (e.g. to explain why something is only partially
     supported)

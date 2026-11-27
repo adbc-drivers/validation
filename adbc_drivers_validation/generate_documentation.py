@@ -287,7 +287,7 @@ class ValidationReport:
             if caveat := tags.get("broken-driver"):
                 caveats.append(caveat)
             if caveat := tags.get("broken-vendor"):
-                caveats.append(caveat)
+                caveats.append(caveat["reason"] if isinstance(caveat, dict) else caveat)
 
         result = "passed"
         if passed == 0:

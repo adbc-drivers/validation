@@ -60,7 +60,7 @@ def generate_tests(
         for query in quirks.query_set.queries.values():
             marks = []
             if metafunc.definition.name != "test_lint_query":
-                marks.extend(query.pytest_marks)
+                marks.extend(query.pytest_marks_for_test(metafunc.definition.name))
 
             if (
                 not quirks.features.statement_bind

@@ -82,7 +82,7 @@ def generate_tests(
             marks = []
             if enabled is not None and not enabled:
                 marks.append(pytest.mark.skip(reason="not implemented"))
-            marks.extend(query.pytest_marks)
+            marks.extend(query.pytest_marks_for_test(metafunc.definition.name))
 
             if not isinstance(query.query, model.IngestQuery):
                 continue
