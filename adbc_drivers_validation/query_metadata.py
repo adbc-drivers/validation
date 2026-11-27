@@ -121,6 +121,15 @@ class FieldTypeName(BaseModel):
     )
 
 
+class BrokenVendor(BaseModel):
+    """An expected vendor failure scoped to named tests."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+    tests: list[str] = Field(min_length=1)
+
+
 class TagsMetadata(BaseModel):
     """Tags metadata for a query."""
 
@@ -150,10 +159,10 @@ class TagsMetadata(BaseModel):
         alias="broken-driver",
         description="Indicate that the driver is broken for this query.",
     )
-    broken_vendor: str | None = Field(
+    broken_vendor: str | BrokenVendor | None = Field(
         default=None,
         alias="broken-vendor",
-        description="Indicate that the vendor is broken for this query.",
+        description="Expected vendor failure for this query or for named tests.",
     )
     show_arrow_type_parameters: bool = Field(
         default=False,

@@ -12,9 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
+from pathlib import Path
 
-from adbc_drivers_validation.model import FromEnv
+import pytest
+from pydantic import ValidationError
+
+from adbc_drivers_validation.model import FromEnv, Query, SelectQuery
+
+
+def test_broken_vendor_marks() -> None:
+    path = Path("unused.txtcase")
+    query = Query(
+        "type/select/example",
+        SelectQuery(path, path, path),
+        [{"tags": {"broken-vendor": "vendor issue"}}],
+    )
+    assert query.pytest_marks[0].mark.kwargs == {"reason": "vendor issue"}
+    assert query.pytest_marks_for_test("test_query")[0].mark.name == "xfail"
+
+    query.metadata_paths = [
+        {
+            "tags": {
+                "broken-vendor": {
+                    "reason": "schema issue",
+                    "tests": ["test_get_table_schema", "test_create"],
+                }
+            }
+        }
+    ]
+    assert query.pytest_marks == []
+    assert query.pytest_marks_for_test("test_query") == []
+    assert query.pytest_marks_for_test("TestQuery.test_get_table_schema") == []
+    for name in ("test_get_table_schema", "test_create"):
+        (mark,) = query.pytest_marks_for_test(name)
+        assert mark.mark.name == "xfail"
+        assert mark.mark.kwargs == {"reason": "schema issue"}
+
+    query.metadata_paths = [
+        {"tags": {"broken-vendor": {"reason": "schema issue", "tests": []}}}
+    ]
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        query.metadata()
 
 
 def test_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
