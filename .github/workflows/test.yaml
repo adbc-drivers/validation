@@ -43,8 +43,8 @@ jobs:
 
       - name: Test
         run: |
-          uv run pytest -vs tests/
+          uv run --locked pytest -vs tests/
 
       - name: Typecheck
         run: |
-          uv run ty check
+          uv run --locked ty check

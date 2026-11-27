@@ -16,3 +16,4 @@
 adbc_drivers_validation/queries/*/*.json
 adbc_drivers_validation/queries/*/*.sql
 pixi.lock
+uv.lock
